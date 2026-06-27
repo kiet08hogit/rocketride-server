@@ -98,20 +98,7 @@ function actionHref(action: PlanAction): string {
 	return action.url;
 }
 
-/**
- * Default handler for action plan clicks -- opens link in new tab or mailto.
- *
- * @param _plan  - The plan that was clicked (unused, kept for signature).
- * @param action - The action descriptor with type and url.
- */
-function defaultActionClick(_plan: CheckoutPlan, action: PlanAction): void {
-	const href = actionHref(action);
-	if (action.type === 'link') {
-		window.open(href, '_blank', 'noopener,noreferrer');
-	} else {
-		window.location.href = href;
-	}
-}
+
 
 /** True when an action link points at GitHub (drives the GitHub glyph on the CTA). */
 function isGithubAction(action: PlanAction | null): boolean {
@@ -376,7 +363,7 @@ export const PlanPicker: React.FC<PlanPickerProps> = ({
 	loading = false,
 	selectedPlan = null,
 	onSelectPlan,
-	onActionClick = defaultActionClick,
+	onActionClick,
 	onPlanCta,
 	ctaLabel = 'Get started',
 	ctaConfig,
@@ -586,8 +573,10 @@ export const PlanPicker: React.FC<PlanPickerProps> = ({
 									}
 									onClick={(e) => {
 										e.stopPropagation();
-										e.preventDefault();
-										onActionClick(plan, action);
+										if (onActionClick) {
+											e.preventDefault();
+											onActionClick(plan, action);
+										}
 									}}
 								>
 									{action.label}

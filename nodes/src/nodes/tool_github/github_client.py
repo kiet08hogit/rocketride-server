@@ -33,6 +33,7 @@ and response normalisation. All tool methods in IInstance call through here.
 from __future__ import annotations
 
 from typing import Any
+import time
 
 import requests
 
@@ -60,31 +61,57 @@ def call(
     }
 
     url = BASE_URL + path
-    try:
-        resp = requests.request(
-            method.upper(),
-            url,
-            headers=headers,
-            params={k: v for k, v in (params or {}).items() if v is not None},
-            json=body,
-            timeout=DEFAULT_TIMEOUT,
-        )
-    except requests.RequestException as exc:
-        raise ValueError(f'GitHub request failed: {exc}') from exc
+    max_retries = 3
 
-    if resp.status_code == 204:
-        return {}
-
-    if not resp.ok:
+    for attempt in range(max_retries):
         try:
-            err = resp.json()
-            msg = err.get('message', resp.text)
-            errors = err.get('errors')
-            if errors:
-                msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
-        except Exception:
-            msg = resp.text or resp.reason or 'unknown error'
-        raise ValueError(f'GitHub API {resp.status_code}: {msg}')
+            resp = requests.request(
+                method.upper(),
+                url,
+                headers=headers,
+                params={k: v for k, v in (params or {}).items() if v is not None},
+                json=body,
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except requests.RequestException as exc:
+            raise ValueError(f'GitHub request failed: {exc}') from exc
+
+        # Handle Rate Limiting (403 or 429)
+        if resp.status_code in (403, 429) and attempt < max_retries - 1:
+            retry_after = resp.headers.get('Retry-After')
+            if retry_after:
+                try:
+                    sleep_time = float(retry_after)
+                except ValueError:
+                    sleep_time = 1.0
+            else:
+                reset_time = resp.headers.get('X-RateLimit-Reset')
+                if reset_time:
+                    try:
+                        sleep_time = max(0, float(reset_time) - time.time())
+                    except ValueError:
+                        sleep_time = 1.0
+                else:
+                    sleep_time = 2.0 ** attempt  # Exponential backoff fallback
+
+            time.sleep(sleep_time)
+            continue
+
+        if resp.status_code == 204:
+            return {}
+
+        if not resp.ok:
+            try:
+                err = resp.json()
+                msg = err.get('message', resp.text)
+                errors = err.get('errors')
+                if errors:
+                    msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
+            except Exception:
+                msg = resp.text or resp.reason or 'unknown error'
+            raise ValueError(f'GitHub API {resp.status_code}: {msg}')
+
+        return resp.json()
 
     return resp.json()
 

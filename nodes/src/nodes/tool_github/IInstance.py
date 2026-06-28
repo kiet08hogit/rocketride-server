@@ -202,11 +202,17 @@ class IInstance(IInstanceBase):
         description='Get the decoded content and metadata of a single file from a GitHub repository.',
     )
     def file_get(self, args):
+        """Get the decoded content and metadata of a single file from a GitHub repository."""
         args = normalize_tool_input(args, tool_name='tool_github')
         repo = self._repo(args)
         path = require_str(args, 'path', tool_name='file_get')
         params = {'ref': args['ref']} if args.get('ref') else None
-        data = call(self._token(), 'GET', f'/repos/{repo}/contents/{path.lstrip("/")}', params=params)
+        try:
+            data = call(self._token(), 'GET', f'/repos/{repo}/contents/{path.lstrip("/")}', params=params)
+        except ValueError as e:
+            if '404' in str(e):
+                return {'found': False, 'message': f'File path "{path}" does not exist.'}
+            raise
         if isinstance(data, list):
             raise ValueError(f'Path "{path}" is a directory — use file_list instead')
         content_b64 = data.get('content', '')
@@ -233,6 +239,7 @@ class IInstance(IInstanceBase):
         description='List files and directories at a path in a GitHub repository.',
     )
     def file_list(self, args):
+        """List files and directories at a path in a GitHub repository."""
         args = normalize_tool_input(args, tool_name='tool_github')
         repo = self._repo(args)
         path = (args.get('path') or '').strip().lstrip('/')

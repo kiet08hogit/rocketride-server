@@ -25,7 +25,13 @@ import threading
 import queue
 import time
 import numpy as np
-import sounddevice as sd
+try:
+    import sounddevice as sd
+except ImportError as e:
+    raise RuntimeError(
+        "The 'sounddevice' library requires PortAudio to be installed on your system. "
+        "Cannot load audio_player node."
+    ) from e
 from ai.common.avi.audio import AudioReader
 from .IGlobal import IGlobal
 
@@ -161,6 +167,10 @@ class Player(AudioReader):
         self._play_callback_buffer = bytearray()
         self._playback_finished = False
 
+        # Check for valid output audio hardware
+        if sd.default.device[1] < 0:
+            raise RuntimeError("No audio output hardware detected on this system. Cannot start audio playback.")
+
         # Create and start the audio output stream
         self._stream = sd.OutputStream(
             samplerate=self.SAMPLE_RATE,
@@ -184,7 +194,11 @@ class Player(AudioReader):
         super().stop()
 
         # Wait until the queue is drained and all buffered audio is played
+        start_wait_time = time.time()
         while not self._play_queue.empty() or len(self._play_callback_buffer) > 0 or not self._playback_finished:
+            if time.time() - start_wait_time > 10.0:  # 10 second timeout
+                print("Warning: Audio playback stop timed out. Forcing stop.")
+                break
             time.sleep(0.1)  # Wait 100ms
 
         # Stop the audio stream if it exists

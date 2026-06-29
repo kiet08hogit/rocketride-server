@@ -94,6 +94,8 @@ def call(
                 else:
                     sleep_time = 2.0 ** attempt  # Exponential backoff fallback
 
+            # Bound the sleep time to prevent blocking the pipeline indefinitely
+            sleep_time = min(sleep_time, DEFAULT_TIMEOUT)
             time.sleep(sleep_time)
             continue
 

@@ -194,8 +194,11 @@ class Player(AudioReader):
         # Stop parent processing
         super().stop()
 
-        # Signal end of playback to unblock the audio callback
-        self.onData(b"")
+        # Signal end of playback to unblock the audio callback (non-blocking)
+        try:
+            self._play_queue.put_nowait(None)
+        except queue.Full:
+            pass
 
         # Wait until the queue is drained and all buffered audio is played
         start_wait_time = time.time()

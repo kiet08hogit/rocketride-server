@@ -27,11 +27,12 @@ import time
 import numpy as np
 try:
     import sounddevice as sd
-except ImportError as e:
+except (ImportError, OSError) as e:
     raise RuntimeError(
         "The 'sounddevice' library requires PortAudio to be installed on your system. "
         "Cannot load audio_player node."
     ) from e
+from rocketlib import debug
 from ai.common.avi.audio import AudioReader
 from .IGlobal import IGlobal
 
@@ -168,7 +169,7 @@ class Player(AudioReader):
         self._playback_finished = False
 
         # Check for valid output audio hardware
-        if sd.default.device[1] < 0:
+        if not any(d.get('max_output_channels', 0) > 0 for d in sd.query_devices()):
             raise RuntimeError("No audio output hardware detected on this system. Cannot start audio playback.")
 
         # Create and start the audio output stream
@@ -197,7 +198,7 @@ class Player(AudioReader):
         start_wait_time = time.time()
         while not self._play_queue.empty() or len(self._play_callback_buffer) > 0 or not self._playback_finished:
             if time.time() - start_wait_time > 10.0:  # 10 second timeout
-                print("Warning: Audio playback stop timed out. Forcing stop.")
+                debug('Warning: Audio playback stop timed out. Forcing stop.')
                 break
             time.sleep(0.1)  # Wait 100ms
 

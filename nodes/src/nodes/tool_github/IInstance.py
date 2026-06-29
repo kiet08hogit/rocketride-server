@@ -211,7 +211,7 @@ class IInstance(IInstanceBase):
             data = call(self._token(), 'GET', f'/repos/{repo}/contents/{path.lstrip("/")}', params=params)
         except ValueError as e:
             if '404' in str(e):
-                return {'found': False, 'message': f'File path "{path}" does not exist.'}
+                return {'found': False, 'message': str(e)}
             raise
         if isinstance(data, list):
             raise ValueError(f'Path "{path}" is a directory — use file_list instead')

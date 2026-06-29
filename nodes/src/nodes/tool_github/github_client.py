@@ -77,7 +77,14 @@ def call(
             raise ValueError(f'GitHub request failed: {exc}') from exc
 
         # Handle Rate Limiting (403 or 429)
-        if resp.status_code in (403, 429) and attempt < max_retries - 1:
+        is_rate_limit = resp.status_code == 429 or (
+            resp.status_code == 403 and (
+                'Retry-After' in resp.headers or
+                resp.headers.get('X-RateLimit-Remaining') == '0' or
+                'rate limit' in resp.text.lower()
+            )
+        )
+        if is_rate_limit and attempt < max_retries - 1:
             retry_after = resp.headers.get('Retry-After')
             if retry_after:
                 try:
@@ -95,8 +102,13 @@ def call(
                     sleep_time = 2.0 ** attempt  # Exponential backoff fallback
 
             # Clamp the sleep time to [0, DEFAULT_TIMEOUT] and handle NaN gracefully
-            if not (0.0 <= sleep_time <= DEFAULT_TIMEOUT):
-                sleep_time = DEFAULT_TIMEOUT if sleep_time > DEFAULT_TIMEOUT else 1.0
+            if sleep_time != sleep_time:
+                sleep_time = 1.0
+            elif sleep_time < 0.0:
+                sleep_time = 0.0
+            elif sleep_time > DEFAULT_TIMEOUT:
+                sleep_time = DEFAULT_TIMEOUT
+
             time.sleep(sleep_time)
             continue
 

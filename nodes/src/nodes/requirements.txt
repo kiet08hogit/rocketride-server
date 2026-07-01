@@ -25,3 +25,10 @@ safetensors
 # Needed for dependencies compilations
 Cython
 versioneer
+
+# OCR base dependencies
+img2table
+# Explicit polars requirements
+polars>=1.0.0
+# Included explicitly for older/emulated CPUs without AVX2 (see depends.py)
+polars-lts-cpu>=1.0.0

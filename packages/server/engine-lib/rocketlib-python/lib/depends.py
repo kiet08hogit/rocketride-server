@@ -714,6 +714,37 @@ def _save_hash(hash_file: str, hash_value: str):
         f.write(hash_value)
 
 
+def _is_x86_64_missing_avx2() -> bool:
+    """Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel)."""
+    machine = platform.machine().lower()
+    if machine not in ('x86_64', 'amd64'):
+        return False
+
+    system = platform.system()
+    if system == 'Darwin':
+        # Check Rosetta or old Mac without AVX2
+        try:
+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)
+            return output.strip() != '1'
+        except Exception:
+            return True
+    elif system == 'Linux':
+        try:
+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:
+                return 'avx2' not in f.read()
+        except Exception:
+            return True
+    elif system == 'Windows':
+        try:
+            import ctypes
+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40
+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)
+        except Exception:
+            return True
+
+    return False
+
+
 def _combine_requirements(file_paths: list[str], output_path: str):
     """Concatenate all requirement files into one."""
     with open(output_path, 'w', encoding='utf-8') as out:
@@ -834,10 +865,19 @@ def _excludes_content() -> str:
     Excludes `uv` (bootstrapped by depends.py; pip-installing it crashes on Windows)
     and, on non-Darwin, plain `onnxruntime` (it clobbers onnxruntime-gpu in the same
     folder; the gpu build provides `import onnxruntime`).
+
+    Also excludes the incorrect polars distribution for the current CPU. polars and
+    polars-lts-cpu both provide ``import polars`` and cannot be installed together.
     """
     excludes = 'uv\n'
     if platform.system() != 'Darwin':
         excludes += 'onnxruntime\n'
+    if _is_x86_64_missing_avx2():
+        # Exclude standard polars so uv doesn't install it alongside polars-lts-cpu
+        excludes += 'polars\n'
+    else:
+        # Exclude the cpu variant so it isn't installed on standard AVX2 hardware
+        excludes += 'polars-lts-cpu\n'
     return excludes
 
 

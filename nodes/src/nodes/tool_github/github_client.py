@@ -36,6 +36,7 @@ from typing import Any
 import time
 
 import requests
+from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 BASE_URL = 'https://api.github.com'
 DEFAULT_TIMEOUT = 30
@@ -60,10 +61,13 @@ def call(
         'X-GitHub-Api-Version': '2022-11-28',
     }
 
-    url = BASE_URL + path
-    max_retries = 3
+    class RateLimitError(Exception):
+        def __init__(self, response: requests.Response):
+            self.response = response
 
-    for attempt in range(max_retries):
+    url = BASE_URL + path
+
+    def _attempt() -> Any:
         try:
             resp = requests.request(
                 method.upper(),
@@ -76,46 +80,20 @@ def call(
         except requests.RequestException as exc:
             raise ValueError(f'GitHub request failed: {exc}') from exc
 
-        # Handle Rate Limiting (403 or 429)
-        is_rate_limit = resp.status_code == 429 or (
-            resp.status_code == 403 and (
-                'Retry-After' in resp.headers or
-                resp.headers.get('X-RateLimit-Remaining') == '0' or
-                'rate limit' in resp.text.lower()
-            )
-        )
-        if is_rate_limit and attempt < max_retries - 1:
-            retry_after = resp.headers.get('Retry-After')
-            if retry_after:
-                try:
-                    sleep_time = float(retry_after)
-                except ValueError:
-                    sleep_time = 1.0
-            else:
-                reset_time = resp.headers.get('X-RateLimit-Reset')
-                if reset_time:
-                    try:
-                        sleep_time = max(0, float(reset_time) - time.time())
-                    except ValueError:
-                        sleep_time = 1.0
-                else:
-                    sleep_time = 2.0 ** attempt  # Exponential backoff fallback
-
-            # Clamp the sleep time to [0, DEFAULT_TIMEOUT] and handle NaN gracefully
-            if sleep_time != sleep_time:
-                sleep_time = 1.0
-            elif sleep_time < 0.0:
-                sleep_time = 0.0
-            elif sleep_time > DEFAULT_TIMEOUT:
-                sleep_time = DEFAULT_TIMEOUT
-
-            time.sleep(sleep_time)
-            continue
-
         if resp.status_code == 204:
             return {}
 
         if not resp.ok:
+            is_rate_limit = resp.status_code == 429 or (
+                resp.status_code == 403 and (
+                    'Retry-After' in resp.headers or
+                    resp.headers.get('X-RateLimit-Remaining') == '0' or
+                    'rate limit' in resp.text.lower()
+                )
+            )
+            if is_rate_limit:
+                raise RateLimitError(resp)
+
             try:
                 err = resp.json()
                 msg = err.get('message', resp.text)
@@ -128,7 +106,24 @@ def call(
 
         return resp.json()
 
-    return resp.json()
+    try:
+        return Retrying(
+            stop=stop_after_attempt(3),
+            wait=wait_exponential(multiplier=1, min=1, max=10),
+            retry=retry_if_exception(lambda e: isinstance(e, RateLimitError)),
+            reraise=True,
+        )(_attempt)
+    except RateLimitError as exc:
+        resp = exc.response
+        try:
+            err = resp.json()
+            msg = err.get('message', resp.text)
+            errors = err.get('errors')
+            if errors:
+                msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
+        except Exception:
+            msg = resp.text or resp.reason or 'unknown error'
+        raise ValueError(f'GitHub API {resp.status_code}: {msg}')
 
 
 # ---------------------------------------------------------------------------

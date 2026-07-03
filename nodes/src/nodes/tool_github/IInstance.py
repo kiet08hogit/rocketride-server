@@ -40,6 +40,7 @@ from rocketlib import IInstanceBase, tool_function
 from ai.common.utils import normalize_tool_input, require_int, require_str
 
 from .github_client import (
+    GitHubAPIError,
     call,
     clean_commit,
     clean_file_entry,
@@ -209,8 +210,8 @@ class IInstance(IInstanceBase):
         params = {'ref': args['ref']} if args.get('ref') else None
         try:
             data = call(self._token(), 'GET', f'/repos/{repo}/contents/{path.lstrip("/")}', params=params)
-        except ValueError as e:
-            if '404' in str(e):
+        except GitHubAPIError as e:
+            if e.status_code == 404:
                 return {'found': False, 'message': str(e)}
             raise
         if isinstance(data, list):

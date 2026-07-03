@@ -36,7 +36,36 @@ from typing import Any
 import time
 
 import requests
-from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
+
+
+class GitHubAPIError(Exception):
+    """Raised when the GitHub API returns an error response."""
+    def __init__(self, status_code: int, message: str):
+        super().__init__(f'GitHub API {status_code}: {message}')
+        self.status_code = status_code
+        self.message = message
+
+
+class RateLimitError(Exception):
+    """Raised when GitHub signals a rate limit (429 or 403 secondary limit)."""
+    def __init__(self, response: requests.Response):
+        self.response = response
+
+
+def _raise_github_error(resp: requests.Response) -> None:
+    """Parse GitHub error response and raise GitHubAPIError."""
+    try:
+        err = resp.json()
+        msg = err.get('message', resp.text)
+        errors = err.get('errors')
+        if errors:
+            msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
+    except Exception:
+        msg = resp.text or resp.reason or 'unknown error'
+    raise GitHubAPIError(resp.status_code, msg)
+
+
+from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt
 
 BASE_URL = 'https://api.github.com'
 DEFAULT_TIMEOUT = 30
@@ -60,10 +89,6 @@ def call(
         'Accept': 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
     }
-
-    class RateLimitError(Exception):
-        def __init__(self, response: requests.Response):
-            self.response = response
 
     url = BASE_URL + path
 
@@ -94,36 +119,40 @@ def call(
             if is_rate_limit:
                 raise RateLimitError(resp)
 
-            try:
-                err = resp.json()
-                msg = err.get('message', resp.text)
-                errors = err.get('errors')
-                if errors:
-                    msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
-            except Exception:
-                msg = resp.text or resp.reason or 'unknown error'
-            raise ValueError(f'GitHub API {resp.status_code}: {msg}')
+            _raise_github_error(resp)
 
         return resp.json()
+
+    def github_rate_limit_wait(retry_state: RetryCallState) -> float:
+        exc = retry_state.outcome.exception()
+        if isinstance(exc, RateLimitError):
+            hdrs = exc.response.headers
+            # 1. Retry-After provides exactly how many seconds to wait
+            if 'Retry-After' in hdrs:
+                try:
+                    return float(hdrs['Retry-After'])
+                except ValueError:
+                    pass
+            
+            # 2. X-RateLimit-Reset provides epoch timestamp of reset
+            if 'X-RateLimit-Reset' in hdrs:
+                try:
+                    reset_epoch = float(hdrs['X-RateLimit-Reset'])
+                    sleep_time = reset_epoch - time.time()
+                    return max(1.0, sleep_time)
+                except ValueError:
+                    pass
+        return 2.0
 
     try:
         return Retrying(
             stop=stop_after_attempt(3),
-            wait=wait_exponential(multiplier=1, min=1, max=10),
+            wait=github_rate_limit_wait,
             retry=retry_if_exception(lambda e: isinstance(e, RateLimitError)),
             reraise=True,
         )(_attempt)
     except RateLimitError as exc:
-        resp = exc.response
-        try:
-            err = resp.json()
-            msg = err.get('message', resp.text)
-            errors = err.get('errors')
-            if errors:
-                msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
-        except Exception:
-            msg = resp.text or resp.reason or 'unknown error'
-        raise ValueError(f'GitHub API {resp.status_code}: {msg}')
+        _raise_github_error(exc.response)
 
 
 # ---------------------------------------------------------------------------

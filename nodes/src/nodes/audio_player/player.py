@@ -47,6 +47,7 @@ class Player(AudioReader):
     CHANNELS = 2  # Stereo audio
     MAX_CHUNK_SIZE = 16 * 1024  # 16 KB per chunk
     MAX_QUEUE_SIZE = 32  # Max chunks in queue
+    STOP_TIMEOUT = 10.0  # Max seconds to wait for stop
 
     IGlobal: IGlobal  # Shared global context (optional external application state)
 
@@ -169,8 +170,14 @@ class Player(AudioReader):
         self._playback_finished = False
 
         # Check for valid output audio hardware
-        if not any(d.get('max_output_channels', 0) > 0 for d in sd.query_devices()):
-            raise RuntimeError("No audio output hardware detected on this system. Cannot start audio playback.")
+        try:
+            if not any(d.get('max_output_channels', 0) > 0 for d in sd.query_devices()):
+                raise RuntimeError("No audio output hardware detected on this system. Cannot start audio playback.")
+        except Exception as e:
+            raise RuntimeError(
+                "The 'sounddevice' library encountered an error checking for audio hardware. "
+                "Cannot start audio playback."
+            ) from e
 
         # Create and start the audio output stream
         self._stream = sd.OutputStream(
@@ -203,7 +210,7 @@ class Player(AudioReader):
         # Wait until the queue is drained and all buffered audio is played
         start_wait_time = time.time()
         while not self._play_queue.empty() or len(self._play_callback_buffer) > 0 or not self._playback_finished:
-            if time.time() - start_wait_time > 10.0:  # 10 second timeout
+            if time.time() - start_wait_time > self.STOP_TIMEOUT:
                 debug('Warning: Audio playback stop timed out. Forcing stop.')
                 break
             time.sleep(0.1)  # Wait 100ms

@@ -98,8 +98,6 @@ function actionHref(action: PlanAction): string {
 	return action.url;
 }
 
-
-
 /** True when an action link points at GitHub (drives the GitHub glyph on the CTA). */
 function isGithubAction(action: PlanAction | null): boolean {
 	return !!action && action.type === 'link' && /github\.com/i.test(action.url);

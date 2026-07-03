@@ -22,7 +22,7 @@
 // =============================================================================
 
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import React, { Children, type ComponentType, type ReactElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 

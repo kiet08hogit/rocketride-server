@@ -1,0 +1,2 @@
+# Authoritative Overlay Dependencies
+# Standard libraries are used for snapshot parsing, no extra pip dependencies required at this time.

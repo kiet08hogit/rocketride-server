@@ -1,0 +1,128 @@
+{
+	"title": "Authoritative Overlay",
+	"protocol": "authoritative-overlay://",
+	"classType": [
+		"guard"
+	],
+	"capabilities": [
+		"experimental"
+	],
+	"register": "filter",
+	"node": "python",
+	"path": "nodes.authoritative_overlay",
+	"prefix": "authoritative_overlay",
+	"description": [
+		"Cross-checks extracted financial numbers against official regulator data ",
+		"(US SEC, EU/UK IFRS, UK Companies House, Japan EDINET). ",
+		"Abstains (drops) the answer if there is no match."
+	],
+	"icon": "util-guard.svg",
+	"lanes": {
+		"answers": [
+			"answers"
+		]
+	},
+	"preconfig": {
+		"default": "basic",
+		"profiles": {
+			"basic": {
+				"title": "Basic: US SEC (EDGAR)",
+				"regulator_type": "sec"
+			}
+		}
+	},
+	"fields": {
+		"regulator_type": {
+			"type": "string",
+			"title": "Regulator Source",
+			"description": "Which regulator database to cross-check against",
+			"default": "sec",
+			"enum": [
+				[
+					"sec",
+					"US SEC (EDGAR)"
+				],
+				[
+					"ifrs",
+					"EU/UK IFRS"
+				],
+				[
+					"companies_house",
+					"UK Companies House"
+				],
+				[
+					"edinet",
+					"Japan EDINET"
+				]
+			]
+		},
+		"authoritative_overlay.basic": {
+			"object": "basic",
+			"properties": [
+				"regulator_type"
+			]
+		},
+		"authoritative_overlay.profile": {
+			"title": "Profile",
+			"description": "Overlay profile",
+			"type": "string",
+			"default": "basic",
+			"enum": [
+				"*>preconfig.profiles.*.title"
+			],
+			"conditional": [
+				{
+					"value": "basic",
+					"properties": [
+						"authoritative_overlay.basic"
+					]
+				}
+			]
+		}
+	},
+	"shape": [
+		{
+			"section": "Pipe",
+			"title": "Authoritative Overlay",
+			"properties": [
+				"authoritative_overlay.profile"
+			]
+		}
+	],
+	"test": {
+		"profiles": [
+			"basic"
+		],
+		"cases": [
+			{
+				"answers": {
+					"answers": [
+						{
+							"text": "15000000"
+						}
+					]
+				},
+				"expect": {
+					"answers": {
+						"notEmpty": true
+					}
+				}
+			},
+			{
+				"answers": {
+					"answers": [
+						{
+							"text": "999999999"
+						}
+					]
+				},
+				"expect": {
+					"answers": {
+						"notEmpty": false
+					}
+				}
+			}
+		]
+	}
+}
+

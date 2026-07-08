@@ -18,6 +18,9 @@
 	],
 	"icon": "util-guard.svg",
 	"lanes": {
+		"text": [
+			"answers"
+		],
 		"answers": [
 			"answers"
 		]
@@ -125,13 +128,7 @@
 		],
 		"cases": [
 			{
-				"answers": {
-					"answers": [
-						{
-							"text": "$15,000,000"
-						}
-					]
-				},
+				"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
 				"expect": {
 					"answers": {
 						"notEmpty": true
@@ -139,16 +136,7 @@
 				}
 			},
 			{
-				"config": {
-					"regulator_type": "ifrs"
-				},
-				"answers": {
-					"answers": [
-						{
-							"text": "€ 25,000,000"
-						}
-					]
-				},
+				"text": "{\"concept\": \"NetIncomeLoss\", \"value\": \"(3.2)m\"}",
 				"expect": {
 					"answers": {
 						"notEmpty": true
@@ -156,47 +144,7 @@
 				}
 			},
 			{
-				"config": {
-					"regulator_type": "companies_house"
-				},
-				"answers": {
-					"answers": [
-						{
-							"text": "£45,000,000"
-						}
-					]
-				},
-				"expect": {
-					"answers": {
-						"notEmpty": true
-					}
-				}
-			},
-			{
-				"config": {
-					"regulator_type": "edinet"
-				},
-				"answers": {
-					"answers": [
-						{
-							"text": "¥ 800,000,000"
-						}
-					]
-				},
-				"expect": {
-					"answers": {
-						"notEmpty": true
-					}
-				}
-			},
-			{
-				"answers": {
-					"answers": [
-						{
-							"text": "999999999"
-						}
-					]
-				},
+				"text": "{\"concept\": \"Revenues\", \"value\": \"$999,000\"}",
 				"expect": {
 					"answers": {
 						"notEmpty": false

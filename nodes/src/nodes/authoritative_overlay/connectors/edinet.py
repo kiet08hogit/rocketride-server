@@ -1,20 +1,5 @@
-import json
-import os
-from rocketlib import debug
+from . import _load_statements_snapshot
 
-def query_edinet(extracted_text: str):
-    """Load the local EDINET snapshot, returning None on failure."""
-    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'edinet_snapshot.json')
-    try:
-        with open(snapshot_path, 'r', encoding='utf-8') as f:
-            data = json.load(f)
-            values = []
-            for v in data.get('statements', {}).values():
-                try:
-                    values.append(float(v))
-                except (ValueError, TypeError):
-                    pass
-            return values
-    except Exception as e:
-        debug(f'EDINET snapshot not available: {e}')
-        return None
+def query_edinet(concept: str, extracted_text: str):
+    """Load the local EDINET snapshot for the given concept."""
+    return _load_statements_snapshot(concept, 'edinet_snapshot.json', 'EDINET')

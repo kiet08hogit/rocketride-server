@@ -27,10 +27,10 @@ class IGlobal(IGlobalBase):
 
             self.regulator_type = config.get('regulator_type', 'sec')
         else:
-            warning(f"Could not find configuration for profile '{profile}'. Using defaults.")
+            warning(f'Could not find configuration for profile {profile}. Using defaults.')
             self.regulator_type = 'sec'
 
-        debug(f"Initialized Authoritative Overlay with regulator: {self.regulator_type}")
+        debug(f'Initialized Authoritative Overlay with regulator: {self.regulator_type}')
         return True
 
     def terminate(self):

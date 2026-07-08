@@ -9,13 +9,46 @@ from .connectors.edinet import query_edinet
 
 
 import re
+import json
 
 def _normalize_number(value_str: str) -> float | None:
-    """Strip currency symbols, commas, and spaces, then parse to float."""
-    # Remove $, €, £, ¥, commas, and spaces
-    clean_str = re.sub(r'[\$€£¥,\s]', '', value_str)
+    """Strip currency symbols, commas, and spaces, then parse to float.
+    Handles parenthesized negatives and scale suffixes (M, k, B, in thousands).
+    """
+    clean_str = value_str.strip().lower()
+    
+    # Handle "in thousands", "in millions", etc.
+    scale = 1.0
+    if 'in thousands' in clean_str:
+        scale = 1_000.0
+        clean_str = clean_str.replace('in thousands', '')
+    elif 'in millions' in clean_str:
+        scale = 1_000_000.0
+        clean_str = clean_str.replace('in millions', '')
+    elif 'in billions' in clean_str:
+        scale = 1_000_000_000.0
+        clean_str = clean_str.replace('in billions', '')
+        
+    # Remove currency, commas, and spaces
+    clean_str = re.sub(r'[\$€£¥,\s]', '', clean_str)
+    
+    # Handle k, m, b suffixes
+    if clean_str.endswith('k'):
+        scale *= 1_000.0
+        clean_str = clean_str[:-1]
+    elif clean_str.endswith('m'):
+        scale *= 1_000_000.0
+        clean_str = clean_str[:-1]
+    elif clean_str.endswith('b'):
+        scale *= 1_000_000_000.0
+        clean_str = clean_str[:-1]
+        
+    # Handle parenthesized negatives: (1.5) -> -1.5
+    if clean_str.startswith('(') and clean_str.endswith(')'):
+        clean_str = '-' + clean_str[1:-1]
+        
     try:
-        return float(clean_str)
+        return float(clean_str) * scale
     except ValueError:
         return None
 
@@ -29,6 +62,24 @@ class IInstance(IInstanceBase):
         """Reset per-object state."""
         pass
 
+    def writeText(self, text: str):
+        """Handle raw text input (used by the test framework).
+
+        The test framework sends data on the ``text`` lane as a plain
+        string.  This handler parses the JSON payload, constructs a
+        proper ``Answer`` object, and delegates to ``writeAnswers``.
+        """
+        text = text.strip()
+        if not text:
+            warning("Abstaining: empty text received.")
+            self.preventDefault()
+            return
+
+        # Build a real Answer so the rest of the pipeline sees the same type
+        answer = Answer()
+        answer.setAnswer(text)
+        self.writeAnswers(answer)
+
     def writeAnswers(self, answer: Answer):
         """Run authoritative cross-check on the answer.
 
@@ -38,13 +89,35 @@ class IInstance(IInstanceBase):
         """
         regulator_type = self.IGlobal.regulator_type
         
-        # Extract text from the answer. We expect this to contain a numeric financial figure.
-        text = answer.getText() if answer else ''
+        # We expect a JSON answer with a 'concept' and a 'value'
+        try:
+            payload = None
+            text_val = answer.getText()
+            
+            if answer.isJson():
+                payload = answer.getJson()
+            else:
+                if isinstance(text_val, dict):
+                    payload = text_val
+                else:
+                    payload = json.loads(text_val)
+                    
+            if not isinstance(payload, dict):
+                raise ValueError(f"Payload is not a dictionary, it is {type(payload)}")
+                
+            concept = payload.get('concept', '')
+            text = str(payload.get('value', ''))
+        except Exception as e:
+            warning(f"Abstaining: Expected JSON answer with 'concept' and 'value'. Error: {e}")
+            self.preventDefault()
+            return
+            
         text = text.strip()
+        concept = concept.strip()
 
-        if not text:
-            # Empty answer, just forward it
-            self.instance.writeAnswers(answer)
+        if not text or not concept:
+            warning("Abstaining: Missing concept or value in answer.")
+            self.preventDefault()
             return
 
         normalized_text = _normalize_number(text)
@@ -58,13 +131,13 @@ class IInstance(IInstanceBase):
         
         try:
             if regulator_type == 'sec':
-                official_data = query_sec(text)
+                official_data = query_sec(concept, text)
             elif regulator_type == 'ifrs':
-                official_data = query_ifrs(text)
+                official_data = query_ifrs(concept, text)
             elif regulator_type == 'companies_house':
-                official_data = query_companies_house(text)
+                official_data = query_companies_house(concept, text)
             elif regulator_type == 'edinet':
-                official_data = query_edinet(text)
+                official_data = query_edinet(concept, text)
             else:
                 warning(f"Unknown regulator type: {regulator_type}")
                 # Fail closed: abstain rather than forward an unverified answer

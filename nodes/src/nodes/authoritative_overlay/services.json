@@ -28,6 +28,18 @@
 			"basic": {
 				"title": "Basic: US SEC (EDGAR)",
 				"regulator_type": "sec"
+			},
+			"ifrs": {
+				"title": "EU/UK IFRS",
+				"regulator_type": "ifrs"
+			},
+			"companies_house": {
+				"title": "UK Companies House",
+				"regulator_type": "companies_house"
+			},
+			"edinet": {
+				"title": "Japan EDINET",
+				"regulator_type": "edinet"
 			}
 		}
 	},
@@ -76,6 +88,24 @@
 					"properties": [
 						"authoritative_overlay.basic"
 					]
+				},
+				{
+					"value": "ifrs",
+					"properties": [
+						"authoritative_overlay.basic"
+					]
+				},
+				{
+					"value": "companies_house",
+					"properties": [
+						"authoritative_overlay.basic"
+					]
+				},
+				{
+					"value": "edinet",
+					"properties": [
+						"authoritative_overlay.basic"
+					]
 				}
 			]
 		}
@@ -98,7 +128,58 @@
 				"answers": {
 					"answers": [
 						{
-							"text": "15000000"
+							"text": "$15,000,000"
+						}
+					]
+				},
+				"expect": {
+					"answers": {
+						"notEmpty": true
+					}
+				}
+			},
+			{
+				"config": {
+					"regulator_type": "ifrs"
+				},
+				"answers": {
+					"answers": [
+						{
+							"text": "€ 25,000,000"
+						}
+					]
+				},
+				"expect": {
+					"answers": {
+						"notEmpty": true
+					}
+				}
+			},
+			{
+				"config": {
+					"regulator_type": "companies_house"
+				},
+				"answers": {
+					"answers": [
+						{
+							"text": "£45,000,000"
+						}
+					]
+				},
+				"expect": {
+					"answers": {
+						"notEmpty": true
+					}
+				}
+			},
+			{
+				"config": {
+					"regulator_type": "edinet"
+				},
+				"answers": {
+					"answers": [
+						{
+							"text": "¥ 800,000,000"
 						}
 					]
 				},

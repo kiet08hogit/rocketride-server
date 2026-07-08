@@ -1,6 +1,6 @@
 import json
 import os
-from rocketlib import info
+from rocketlib import debug
 
 def query_sec(extracted_text: str):
     """
@@ -11,7 +11,17 @@ def query_sec(extracted_text: str):
     try:
         with open(snapshot_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            return data
+            values = []
+            facts = data.get('facts', {}).get('us-gaap', {})
+            for concept in facts.values():
+                for unit_list in concept.get('units', {}).values():
+                    for item in unit_list:
+                        if 'val' in item:
+                            try:
+                                values.append(float(item['val']))
+                            except (ValueError, TypeError):
+                                pass
+            return values
     except Exception as e:
-        info(f"SEC snapshot not available: {e}")
+        debug(f'SEC snapshot not available: {e}')
         return None

@@ -1,4 +1,4 @@
-from rocketlib import IGlobalBase, info, warning
+from rocketlib import IGlobalBase, debug, warning
 import json
 
 class IGlobal(IGlobalBase):
@@ -30,7 +30,7 @@ class IGlobal(IGlobalBase):
             warning(f"Could not find configuration for profile '{profile}'. Using defaults.")
             self.regulator_type = 'sec'
 
-        info(f"Initialized Authoritative Overlay with regulator: {self.regulator_type}")
+        debug(f"Initialized Authoritative Overlay with regulator: {self.regulator_type}")
         return True
 
     def terminate(self):

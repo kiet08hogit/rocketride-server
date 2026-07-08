@@ -71,7 +71,7 @@ class IInstance(IInstanceBase):
         """
         text = text.strip()
         if not text:
-            warning("Abstaining: empty text received.")
+            warning('Abstaining: empty text received')
             self.preventDefault()
             return
 
@@ -105,7 +105,7 @@ class IInstance(IInstanceBase):
             if not isinstance(payload, dict):
                 raise ValueError(f"Payload is not a dictionary, it is {type(payload)}")
                 
-            concept = payload.get('concept', '')
+            concept = str(payload.get('concept', ''))
             text = str(payload.get('value', ''))
         except Exception as e:
             warning(f"Abstaining: Expected JSON answer with 'concept' and 'value'. Error: {e}")
@@ -116,7 +116,7 @@ class IInstance(IInstanceBase):
         concept = concept.strip()
 
         if not text or not concept:
-            warning("Abstaining: Missing concept or value in answer.")
+            warning('Abstaining: Missing concept or value in answer')
             self.preventDefault()
             return
 

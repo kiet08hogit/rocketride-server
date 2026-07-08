@@ -30,8 +30,8 @@ def query_sec(concept: str, extracted_text: str):
                                 pass
             return values
     except FileNotFoundError:
-        debug("US SEC snapshot file not found.")
+        debug('US SEC snapshot file not found')
         return None
     except json.JSONDecodeError:
-        debug("US SEC snapshot file is invalid JSON.")
+        debug('US SEC snapshot file is invalid JSON')
         return None

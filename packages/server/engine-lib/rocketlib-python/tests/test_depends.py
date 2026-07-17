@@ -6,8 +6,11 @@ without uv, pip, or a network. Every test redirects the "engine executable
 directory" into ``tmp_path`` so nothing touches a real engine cache.
 """
 
+import ctypes
 import os
+from io import StringIO
 from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -137,19 +140,128 @@ class TestWriteExcludesFile:
     def test_always_excludes_uv(self, exe_dir, monkeypatch):
         depends.engine_cache_dir(create=True)
         monkeypatch.setattr(depends.platform, 'system', lambda: 'Darwin')
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
 
         path = depends._write_excludes_file()
 
         assert path == str(exe_dir / 'cache' / 'excludes.txt')
-        assert (exe_dir / 'cache' / 'excludes.txt').read_text(encoding='utf-8') == 'uv\n'
+        assert (exe_dir / 'cache' / 'excludes.txt').read_text(encoding='utf-8') == 'uv\npolars-lts-cpu\n'
 
     def test_excludes_plain_onnxruntime_off_darwin(self, exe_dir, monkeypatch):
         depends.engine_cache_dir(create=True)
         monkeypatch.setattr(depends.platform, 'system', lambda: 'Linux')
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
 
         depends._write_excludes_file()
 
-        assert (exe_dir / 'cache' / 'excludes.txt').read_text(encoding='utf-8') == 'uv\nonnxruntime\n'
+        assert (exe_dir / 'cache' / 'excludes.txt').read_text(encoding='utf-8') == 'uv\nonnxruntime\npolars-lts-cpu\n'
+
+    def test_excludes_wrong_polars_variant(self, exe_dir, monkeypatch):
+        depends.engine_cache_dir(create=True)
+        monkeypatch.setattr(depends.platform, 'system', lambda: 'Darwin')
+
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
+        contents = open(depends._write_excludes_file(), encoding='utf-8').read()
+        assert 'polars-lts-cpu\n' in contents
+        assert contents.replace('polars-lts-cpu\n', '').count('polars\n') == 0
+
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: True)
+        contents = open(depends._write_excludes_file(), encoding='utf-8').read()
+        assert 'polars\n' in contents
+        assert 'polars-lts-cpu\n' not in contents
+
+
+class TestIsX86_64MissingAvx2:
+    def setup_method(self):
+        depends._is_x86_64_missing_avx2.cache_clear()
+
+    def teardown_method(self):
+        depends._is_x86_64_missing_avx2.cache_clear()
+
+    def test_missing_avx2_non_x86(self, monkeypatch):
+        monkeypatch.setattr(depends.platform, 'system', lambda: 'Darwin')
+        monkeypatch.setattr(depends.platform, 'machine', lambda: 'arm64')
+        assert depends._is_x86_64_missing_avx2() is False
+
+        depends._is_x86_64_missing_avx2.cache_clear()
+        monkeypatch.setattr(depends.platform, 'machine', lambda: 'aarch64')
+        assert depends._is_x86_64_missing_avx2() is False
+
+    def test_missing_avx2_darwin_rosetta(self, monkeypatch):
+        monkeypatch.setattr(depends.platform, 'machine', lambda: 'x86_64')
+        monkeypatch.setattr(depends.platform, 'system', lambda: 'Darwin')
+
+        monkeypatch.setattr(depends.subprocess, 'check_output', lambda *a, **k: '0\n')
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is True
+
+        monkeypatch.setattr(depends.subprocess, 'check_output', lambda *a, **k: '1\n')
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is False
+
+        def _boom(*a, **k):
+            raise Exception('sysctl failed')
+
+        monkeypatch.setattr(depends.subprocess, 'check_output', _boom)
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is True
+
+    def test_missing_avx2_linux(self, monkeypatch):
+        monkeypatch.setattr(depends.platform, 'machine', lambda: 'x86_64')
+        monkeypatch.setattr(depends.platform, 'system', lambda: 'Linux')
+
+        cpuinfo_avx2 = (
+            'flags: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat '
+            'pse36 clflush dts acpi mmx fxsr sse sse2 ss ht tm pbe syscall nx pdpe1gb '
+            'rdtscp lm constant_tsc art arch_perfmon pebs bts rep_good nopl xtopology '
+            'nonstop_tsc cpuid aperfmperf pni pclmulqdq dtes64 monitor ds_cpl vmx smx '
+            'est tm2 ssse3 sdbg fma cx16 xtpr pdcm pcid dca sse4_1 sse4_2 x2apic movbe '
+            'popcnt tsc_deadline_timer aes xsave avx f16c rdrand lahf_lm abm 3dnowprefetch '
+            'cpuid_fault epb cat_l3 cdp_l3 invpcid_single pti intel_ppin ssbd mba ibrs ibpb '
+            'stibp tpr_shadow vnmi flexpriority ept vpid ept_ad fsgsbase tsc_adjust bmi1 '
+            'avx2 smep bmi2 erms invpcid cqm mpx rdt_a avx512f avx512dq rdseed adx smap '
+            'clflushopt clwb intel_pt avx512cd avx512bw avx512vl xsaveopt xsavec xgetbv1 '
+            'xsaves cqm_llc cqm_occup_llc cqm_mbm_total cqm_mbm_local dtherm ida arat pln '
+            'pts pku ospke md_clear pconfig stibp_always_on flush_l1d arch_capabilities'
+        )
+
+        monkeypatch.setattr(depends, 'open', lambda *a, **k: StringIO(cpuinfo_avx2), raising=False)
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is False
+
+        monkeypatch.setattr(depends, 'open', lambda *a, **k: StringIO('flags: fpu vme de pse tsc'), raising=False)
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is True
+
+        def _boom(*a, **k):
+            raise Exception('Permission denied')
+
+        monkeypatch.setattr(depends, 'open', _boom, raising=False)
+        depends._is_x86_64_missing_avx2.cache_clear()
+        assert depends._is_x86_64_missing_avx2() is True
+
+    def test_missing_avx2_windows(self, monkeypatch):
+        monkeypatch.setattr(depends.platform, 'machine', lambda: 'AMD64')
+        monkeypatch.setattr(depends.platform, 'system', lambda: 'Windows')
+
+        mock_kernel32 = MagicMock()
+        mock_windll = MagicMock()
+        mock_windll.kernel32 = mock_kernel32
+
+        # Patch windll onto the real ctypes module (create=True for non-Windows).
+        # Replacing sys.modules['ctypes'] breaks engine-embedded pytest.
+        with patch.object(ctypes, 'windll', mock_windll, create=True):
+            mock_kernel32.IsProcessorFeaturePresent.return_value = True
+            depends._is_x86_64_missing_avx2.cache_clear()
+            assert depends._is_x86_64_missing_avx2() is False
+
+            mock_kernel32.IsProcessorFeaturePresent.return_value = False
+            depends._is_x86_64_missing_avx2.cache_clear()
+            assert depends._is_x86_64_missing_avx2() is True
+
+            mock_kernel32.IsProcessorFeaturePresent.side_effect = Exception('Failed')
+            depends._is_x86_64_missing_avx2.cache_clear()
+            assert depends._is_x86_64_missing_avx2() is True
 
 
 class TestEnsureConstraints:

@@ -32,6 +32,7 @@ Two modes of operation:
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import os
 import platform
@@ -714,6 +715,7 @@ def _save_hash(hash_file: str, hash_value: str):
         f.write(hash_value)
 
 
+@functools.lru_cache()
 def _is_x86_64_missing_avx2() -> bool:
     """Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel)."""
     machine = platform.machine().lower()
@@ -737,8 +739,11 @@ def _is_x86_64_missing_avx2() -> bool:
     elif system == 'Windows':
         try:
             import ctypes
+            kernel32 = ctypes.windll.kernel32
+            kernel32.IsProcessorFeaturePresent.argtypes = [ctypes.c_uint32]
+            kernel32.IsProcessorFeaturePresent.restype = ctypes.c_int
             # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40
-            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)
+            return not bool(kernel32.IsProcessorFeaturePresent(40))
         except Exception:
             return True
 
@@ -873,9 +878,11 @@ def _excludes_content() -> str:
     if platform.system() != 'Darwin':
         excludes += 'onnxruntime\n'
     if _is_x86_64_missing_avx2():
+        debug('AVX2 instructions not detected; using polars-lts-cpu fallback')
         # Exclude standard polars so uv doesn't install it alongside polars-lts-cpu
         excludes += 'polars\n'
     else:
+        debug('AVX2 instructions detected; using standard polars')
         # Exclude the cpu variant so it isn't installed on standard AVX2 hardware
         excludes += 'polars-lts-cpu\n'
     return excludes

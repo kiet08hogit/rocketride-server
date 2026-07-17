@@ -36,10 +36,12 @@ from typing import Any
 import time
 
 import requests
+from tenacity import RetryCallState, Retrying, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
-class GitHubAPIError(Exception):
+class GitHubAPIError(ValueError):
     """Raised when the GitHub API returns an error response."""
+
     def __init__(self, status_code: int, message: str):
         super().__init__(f'GitHub API {status_code}: {message}')
         self.status_code = status_code
@@ -48,6 +50,7 @@ class GitHubAPIError(Exception):
 
 class RateLimitError(Exception):
     """Raised when GitHub signals a rate limit (429 or 403 secondary limit)."""
+
     def __init__(self, response: requests.Response):
         self.response = response
 
@@ -64,8 +67,6 @@ def _raise_github_error(resp: requests.Response) -> None:
         msg = resp.text or resp.reason or 'unknown error'
     raise GitHubAPIError(resp.status_code, msg)
 
-
-from tenacity import RetryCallState, Retrying, retry_if_exception, stop_after_attempt
 
 BASE_URL = 'https://api.github.com'
 DEFAULT_TIMEOUT = 30
@@ -130,7 +131,7 @@ def call(
             # 1. Retry-After provides exactly how many seconds to wait
             if 'Retry-After' in hdrs:
                 try:
-                    return float(hdrs['Retry-After'])
+                    return min(float(DEFAULT_TIMEOUT), float(hdrs['Retry-After']))
                 except ValueError:
                     pass
             
@@ -139,16 +140,16 @@ def call(
                 try:
                     reset_epoch = float(hdrs['X-RateLimit-Reset'])
                     sleep_time = reset_epoch - time.time()
-                    return max(1.0, sleep_time)
+                    return min(float(DEFAULT_TIMEOUT), max(1.0, sleep_time))
                 except ValueError:
                     pass
-        return 2.0
+        return float(wait_exponential(multiplier=2, min=2, max=DEFAULT_TIMEOUT)(retry_state))
 
     try:
         return Retrying(
             stop=stop_after_attempt(3),
             wait=github_rate_limit_wait,
-            retry=retry_if_exception(lambda e: isinstance(e, RateLimitError)),
+            retry=retry_if_exception_type(RateLimitError),
             reraise=True,
         )(_attempt)
     except RateLimitError as exc:

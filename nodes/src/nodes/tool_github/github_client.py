@@ -128,10 +128,20 @@ def call(
         exc = retry_state.outcome.exception()
         if isinstance(exc, RateLimitError):
             hdrs = exc.response.headers
+
+            def _check_and_cap(w: float) -> float:
+                import math
+                if not math.isfinite(w) or w < 0:
+                    raise ValueError()
+                if w > DEFAULT_TIMEOUT:
+                    # Fail fast if server requires waiting longer than local cap
+                    raise exc
+                return w
+
             # 1. Retry-After provides exactly how many seconds to wait
             if 'Retry-After' in hdrs:
                 try:
-                    return min(float(DEFAULT_TIMEOUT), float(hdrs['Retry-After']))
+                    return _check_and_cap(float(hdrs['Retry-After']))
                 except ValueError:
                     pass
             
@@ -140,7 +150,7 @@ def call(
                 try:
                     reset_epoch = float(hdrs['X-RateLimit-Reset'])
                     sleep_time = reset_epoch - time.time()
-                    return min(float(DEFAULT_TIMEOUT), max(1.0, sleep_time))
+                    return _check_and_cap(max(1.0, sleep_time))
                 except ValueError:
                     pass
         return float(wait_exponential(multiplier=2, min=2, max=DEFAULT_TIMEOUT)(retry_state))

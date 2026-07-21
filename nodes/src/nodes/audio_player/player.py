@@ -29,8 +29,8 @@ try:
     import sounddevice as sd
 except (ImportError, OSError) as e:
     raise RuntimeError(
-        "The 'sounddevice' library requires PortAudio to be installed on your system. "
-        "Cannot load audio_player node."
+        'The \'sounddevice\' library requires PortAudio to be installed on your system. '
+        'Cannot load audio_player node.'
     ) from e
 from rocketlib import debug
 from ai.common.avi.audio import AudioReader
@@ -171,13 +171,15 @@ class Player(AudioReader):
 
         # Check for valid output audio hardware
         try:
-            if not any(d.get('max_output_channels', 0) > 0 for d in sd.query_devices()):
-                raise RuntimeError("No audio output hardware detected on this system. Cannot start audio playback.")
+            devices = sd.query_devices()
         except Exception as e:
             raise RuntimeError(
-                "The 'sounddevice' library encountered an error checking for audio hardware. "
-                "Cannot start audio playback."
+                'The \'sounddevice\' library encountered an error checking for audio hardware. '
+                'Cannot start audio playback.'
             ) from e
+
+        if not any(d.get('max_output_channels', 0) > 0 for d in devices):
+            raise RuntimeError('No audio output hardware detected on this system. Cannot start audio playback.')
 
         # Create and start the audio output stream
         self._stream = sd.OutputStream(
@@ -201,22 +203,27 @@ class Player(AudioReader):
         # Stop parent processing
         super().stop()
 
-        # Signal end of playback to unblock the audio callback (non-blocking)
-        try:
-            self._play_queue.put_nowait(None)
-        except queue.Full:
-            pass
-
         # Wait until the queue is drained and all buffered audio is played
-        start_wait_time = time.time()
-        while not self._play_queue.empty() or len(self._play_callback_buffer) > 0 or not self._playback_finished:
-            if time.time() - start_wait_time > self.STOP_TIMEOUT:
+        start_wait_time = time.monotonic()
+        sentinel_sent = False
+        while len(self._play_callback_buffer) > 0 or not self._playback_finished:
+            if not sentinel_sent:
+                try:
+                    self._play_queue.put_nowait(None)
+                    sentinel_sent = True
+                except queue.Full:
+                    pass
+
+            if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
                 debug('Warning: Audio playback stop timed out. Forcing stop.')
                 break
             time.sleep(0.1)  # Wait 100ms
 
         # Stop the audio stream if it exists
         if self._stream:
-            self._stream.stop()
+            if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
+                self._stream.abort()
+            else:
+                self._stream.stop()
             self._stream.close()
             self._stream = None

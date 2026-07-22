@@ -55,6 +55,21 @@ class RateLimitError(Exception):
         self.response = response
 
 
+def _rate_limit_hint(headers) -> str:
+    """Human-readable retry hint from rate-limit headers, or '' if none present."""
+    retry_after = headers.get('Retry-After')
+    if retry_after:
+        return f'retry after {retry_after}s'
+    reset = headers.get('X-RateLimit-Reset')
+    if reset:
+        try:
+            secs = max(0, int(float(reset) - time.time()))
+            return f'rate limit resets in ~{secs}s'
+        except ValueError:
+            return f'rate limit resets at epoch {reset}'
+    return ''
+
+
 def _raise_github_error(resp: requests.Response) -> None:
     """Parse GitHub error response and raise GitHubAPIError."""
     try:
@@ -65,6 +80,9 @@ def _raise_github_error(resp: requests.Response) -> None:
             msg += ' — ' + '; '.join(e.get('message', str(e)) if isinstance(e, dict) else str(e) for e in errors)
     except Exception:
         msg = resp.text or resp.reason or 'unknown error'
+    hint = _rate_limit_hint(resp.headers)
+    if hint:
+        msg += f' ({hint})'
     raise GitHubAPIError(resp.status_code, msg)
 
 
@@ -111,10 +129,11 @@ def call(
 
         if not resp.ok:
             is_rate_limit = resp.status_code == 429 or (
-                resp.status_code == 403 and (
-                    'Retry-After' in resp.headers or
-                    resp.headers.get('X-RateLimit-Remaining') == '0' or
-                    'rate limit' in resp.text.lower()
+                resp.status_code == 403
+                and (
+                    'Retry-After' in resp.headers
+                    or resp.headers.get('X-RateLimit-Remaining') == '0'
+                    or 'rate limit' in resp.text.lower()
                 )
             )
             if is_rate_limit:
@@ -131,6 +150,7 @@ def call(
 
             def _check_and_cap(w: float) -> float:
                 import math
+
                 if not math.isfinite(w) or w < 0:
                     raise ValueError()
                 if w > DEFAULT_TIMEOUT:
@@ -144,7 +164,7 @@ def call(
                     return _check_and_cap(float(hdrs['Retry-After']))
                 except ValueError:
                     pass
-            
+
             # 2. X-RateLimit-Reset provides epoch timestamp of reset
             if 'X-RateLimit-Reset' in hdrs:
                 try:

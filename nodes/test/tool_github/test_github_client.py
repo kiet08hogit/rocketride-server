@@ -15,18 +15,18 @@ _STUB_MODULE_NAMES = ('rocketlib', 'ai', 'ai.common', 'ai.common.config', 'ai.co
 
 def _install_stubs() -> None:
     mod_rl = types.ModuleType('rocketlib')
-    
+
     def mock_tool_function(*args, **kwargs):
         return lambda f: f
-    
+
     mod_rl.tool_function = mock_tool_function
-    
+
     class IInstanceBase:
         pass
-        
+
     class IGlobalBase:
         pass
-        
+
     mod_rl.IInstanceBase = IInstanceBase
     mod_rl.IGlobalBase = IGlobalBase
     mod_rl.OPEN_MODE = Mock()
@@ -35,10 +35,12 @@ def _install_stubs() -> None:
 
     sys.modules['ai'] = types.ModuleType('ai')
     sys.modules['ai.common'] = types.ModuleType('ai.common')
-    
+
     mod_ai_common_config = types.ModuleType('ai.common.config')
+
     class Config:
         pass
+
     mod_ai_common_config.Config = Config
     sys.modules['ai.common.config'] = mod_ai_common_config
 
@@ -73,7 +75,7 @@ def test_file_get_404_ambiguous():
     inst = Mock()
     inst._token.return_value = 'token'
     inst._repo.return_value = 'owner/repo'
-    
+
     with patch('tool_github.IInstance.call') as mock_call:
         # 1. Missing file or inaccessible repository
         mock_call.side_effect = GitHubAPIError(404, 'Not Found')
@@ -95,12 +97,12 @@ def test_non_rate_limit_403(mock_request):
     resp_403.headers = {}
     resp_403.json.return_value = {'message': 'Resource not accessible by integration'}
     resp_403.text = 'Resource not accessible by integration'
-    
+
     mock_request.return_value = resp_403
-    
+
     with pytest.raises(GitHubAPIError) as exc_info:
         call('token', 'GET', '/test')
-        
+
     assert exc_info.value.status_code == 403
     assert 'Resource not accessible' in exc_info.value.message
     assert mock_request.call_count == 1  # No retries
@@ -117,16 +119,16 @@ def test_rate_limit_429_retry_after(mock_request, mock_sleep, mock_time):
     resp_429.headers = {'Retry-After': '5'}
     resp_429.json.return_value = {'message': 'rate limit'}
     resp_429.text = 'rate limit'
-    
+
     resp_success = Mock(spec=requests.Response)
     resp_success.ok = True
     resp_success.status_code = 200
     resp_success.json.return_value = {'success': True}
-    
+
     mock_request.side_effect = [resp_429, resp_429, resp_success]
-    
+
     result = call('token', 'GET', '/test')
-    
+
     assert result == {'success': True}
     assert mock_request.call_count == 3
     assert mock_sleep.call_count == 2
@@ -144,12 +146,12 @@ def test_rate_limit_403_reset(mock_request, mock_sleep, mock_time):
     resp_403.headers = {'X-RateLimit-Remaining': '0', 'X-RateLimit-Reset': '1010.0'}
     resp_403.json.return_value = {'message': 'rate limit'}
     resp_403.text = 'rate limit'
-    
+
     mock_request.side_effect = [resp_403, resp_403, resp_403, resp_403]
-    
+
     with pytest.raises(GitHubAPIError) as exc_info:
         call('token', 'GET', '/test')
-        
+
     assert exc_info.value.status_code == 403
     assert mock_request.call_count == 3
     assert mock_sleep.call_count == 2
@@ -168,16 +170,16 @@ def test_rate_limit_retry_after_malformed(mock_request, mock_sleep, mock_time, b
     resp_429.headers = {'Retry-After': bad_value}
     resp_429.json.return_value = {'message': 'rate limit'}
     resp_429.text = 'rate limit'
-    
+
     resp_success = Mock(spec=requests.Response)
     resp_success.ok = True
     resp_success.status_code = 200
     resp_success.json.return_value = {'success': True}
-    
+
     mock_request.side_effect = [resp_429, resp_success]
-    
+
     result = call('token', 'GET', '/test')
-    
+
     assert result == {'success': True}
     assert mock_request.call_count == 2
     assert mock_sleep.call_count == 1
@@ -197,14 +199,14 @@ def test_rate_limit_excessive_wait_fails_fast(mock_request, mock_sleep, mock_tim
     resp_429.headers = {'Retry-After': '3600'}  # 1 hour
     resp_429.json.return_value = {'message': 'rate limit'}
     resp_429.text = 'rate limit'
-    
+
     mock_request.return_value = resp_429
-    
+
     with pytest.raises(GitHubAPIError) as exc_info:
         call('token', 'GET', '/test')
-        
+
     assert exc_info.value.status_code == 429
     assert 'rate limit' in exc_info.value.message
+    assert 'retry after 3600s' in exc_info.value.message  # reset hint tells caller when to retry
     assert mock_request.call_count == 1  # Failed fast on first attempt
     assert mock_sleep.call_count == 0  # No sleep
-

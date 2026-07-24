@@ -67,14 +67,14 @@ def test_get_gcp_credentials_service_account_success_raw_json(mock_from_info):
     
     config = {
         'authType': 'service_account', 
-        'serviceAccountKey': '{"project_id": "test-project"}'
+        'serviceAccountKey': '{"project_id": "test-project", "client_email": "test@example.com"}'
     }
     
     creds, project_id = get_gcp_credentials(config)
     
     assert creds == mock_creds
     assert project_id == 'test-project'
-    mock_from_info.assert_called_once_with({'project_id': 'test-project'})
+    mock_from_info.assert_called_once_with({'project_id': 'test-project', 'client_email': 'test@example.com'})
 
 @patch('google.oauth2.service_account.Credentials.from_service_account_info')
 def test_get_gcp_credentials_service_account_success_data_url(mock_from_info):

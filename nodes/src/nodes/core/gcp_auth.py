@@ -33,7 +33,7 @@ def get_gcp_credentials(config: dict, scopes: Optional[list[str]] = None) -> Tup
         
         # RocketRide UI usually uploads files as base64 data-url: data:application/json;base64,...
         try:
-            if ',' in key_data:
+            if key_data.startswith('data:'):
                 _, b64_data = key_data.split(',', 1)
                 json_bytes = base64.b64decode(b64_data)
                 key_info = json.loads(json_bytes.decode('utf-8'))

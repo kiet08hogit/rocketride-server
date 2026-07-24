@@ -6,17 +6,17 @@ class IInstance(IInstanceBase):
     """Vertex AI Vector Search instance."""
 
     @tool_function(
-        description="Search for nearest neighbors in Vertex AI Vector Search.",
+        description='Search for nearest neighbors in Vertex AI Vector Search.',
         args={
-            "query_vector": "A list of floats representing the query embedding.",
-            "top_k": "Number of nearest neighbors to return.",
-            "score_threshold": "Optional minimum distance score to return."
+            'query_vector': 'A list of floats representing the query embedding.',
+            'top_k': 'Number of nearest neighbors to return.',
+            'score_threshold': 'Optional minimum distance score to return.'
         }
     )
     def search(self, query_vector: List[float], top_k: int = 10, score_threshold: float = 0.0) -> List[Dict[str, Any]]:
         index_endpoint = self.glb.index_endpoint
         if not index_endpoint:
-            return [{"error": "Vertex AI Index Endpoint is not connected."}]
+            return [{'error': 'Vertex AI Index Endpoint is not connected.'}]
             
         try:
             response = index_endpoint.find_neighbors(
@@ -32,9 +32,9 @@ class IInstance(IInstanceBase):
                         continue
                     
                     results.append({
-                        "id": neighbor.id,
-                        "distance": neighbor.distance
+                        'id': neighbor.id,
+                        'distance': neighbor.distance
                     })
             return results
         except Exception as e:
-            return [{"error": f"Failed to search Vertex AI: {e}"}]
+            return [{'error': f'Failed to search Vertex AI: {e}'}]

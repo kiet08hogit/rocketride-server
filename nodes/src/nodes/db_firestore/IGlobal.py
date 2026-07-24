@@ -21,7 +21,7 @@ class IGlobal(IGlobalBase):
             return
 
         if firestore is None:
-            raise ImportError("google-cloud-firestore is not installed.")
+            raise ImportError('google-cloud-firestore is not installed.')
 
         cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
 
@@ -32,7 +32,7 @@ class IGlobal(IGlobalBase):
         try:
             creds, project_id = get_gcp_credentials(cfg)
         except Exception as e:
-            warning(f"Firestore authentication failed: {e}")
+            warning(f'Firestore authentication failed: {e}')
             raise
 
         self.client = firestore.Client(
@@ -44,10 +44,10 @@ class IGlobal(IGlobalBase):
         # Fail fast connection check
         try:
             # simple check to verify connectivity/auth
-            next(self.client.collections(page_size=1), None)
+            next(self.client.collections(), None)
             debug(f'db_firestore: connected to project {self.client.project}, database={self.database}')
         except Exception as e:
-            warning(f"Firestore connection check failed: {e}")
+            warning(f'Firestore connection check failed: {e}')
             raise
 
     def validateConfig(self) -> None:
@@ -57,7 +57,7 @@ class IGlobal(IGlobalBase):
             if not str(cfg.get('collection') or '').strip():
                 warning('collection is recommended')
         except GCPAuthError as e:
-            warning(f"Auth configuration error: {e}")
+            warning(f'Auth configuration error: {e}')
         except Exception as e:
             warning(str(e))
 

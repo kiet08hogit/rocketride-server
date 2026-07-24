@@ -21,7 +21,7 @@ class IGlobal(IGlobalBase):
             return
 
         if storage is None:
-            raise ImportError("google-cloud-storage is not installed.")
+            raise ImportError('google-cloud-storage is not installed.')
 
         cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
 
@@ -32,7 +32,7 @@ class IGlobal(IGlobalBase):
         try:
             creds, project_id = get_gcp_credentials(cfg)
         except Exception as e:
-            warning(f"GCS authentication failed: {e}")
+            warning(f'GCS authentication failed: {e}')
             raise
 
         self.client = storage.Client(
@@ -48,7 +48,7 @@ class IGlobal(IGlobalBase):
             else:
                 debug(f'tool_gcs: connected to project {self.client.project} with no specific bucket configured')
         except Exception as e:
-            warning(f"GCS connection check failed: {e}")
+            warning(f'GCS connection check failed: {e}')
             raise
 
     def validateConfig(self) -> None:
@@ -58,7 +58,7 @@ class IGlobal(IGlobalBase):
             if not str(cfg.get('bucketName') or '').strip():
                 warning('bucketName is required')
         except GCPAuthError as e:
-            warning(f"Auth configuration error: {e}")
+            warning(f'Auth configuration error: {e}')
         except Exception as e:
             warning(str(e))
 

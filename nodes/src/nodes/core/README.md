@@ -93,6 +93,14 @@ These files define common fields that are merged into a service definition as re
 | `aws.secretKey` | string, secure, optional | Secret key used to access AWS services. |
 | `aws.region` | enum | AWS region (us-east-1 through sa-east-1; default empty "Select Region"). |
 
+### Google Cloud Platform credentials (`services.common.gcp.json`)
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `gcp.authType` | enum `adc` / `service_account`, default `adc` | Choose how to authenticate to Google Cloud Platform. |
+| `gcp.serviceAccountKey` | data-url (`.json` upload) | Service Account JSON key file (used when authType is `service_account`). |
+| `gcp.projectId` | string, optional | Specify the Google Cloud Project ID explicitly. Leave blank to infer from credentials. |
+
 ### Google Workspace credentials (`services.common.google.json`)
 
 | Field | Type | Description |

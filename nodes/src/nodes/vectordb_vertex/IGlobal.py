@@ -22,7 +22,7 @@ class IGlobal(IGlobalBase):
             return
 
         if aiplatform is None:
-            raise ImportError("google-cloud-aiplatform is not installed.")
+            raise ImportError('google-cloud-aiplatform is not installed.')
 
         cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
 
@@ -31,13 +31,13 @@ class IGlobal(IGlobalBase):
         self.deployed_index_id = str((cfg.get('deployedIndexId') or '')).strip()
 
         if not index_endpoint_id or not self.deployed_index_id:
-            warning("indexEndpointId and deployedIndexId are required for Vertex AI Vector Search.")
+            warning('indexEndpointId and deployedIndexId are required for Vertex AI Vector Search.')
 
         # Auth
         try:
             creds, self.project_id = get_gcp_credentials(cfg)
         except Exception as e:
-            warning(f"Vertex AI authentication failed: {e}")
+            warning(f'Vertex AI authentication failed: {e}')
             raise
 
         aiplatform.init(
@@ -54,7 +54,7 @@ class IGlobal(IGlobalBase):
                 )
                 debug(f'vectordb_vertex: connected to index endpoint {index_endpoint_id}')
         except Exception as e:
-            warning(f"Vertex AI connection check failed: {e}")
+            warning(f'Vertex AI connection check failed: {e}')
             raise
 
     def validateConfig(self) -> None:
@@ -66,7 +66,7 @@ class IGlobal(IGlobalBase):
             if not str(cfg.get('deployedIndexId') or '').strip():
                 warning('deployedIndexId is required')
         except GCPAuthError as e:
-            warning(f"Auth configuration error: {e}")
+            warning(f'Auth configuration error: {e}')
         except Exception as e:
             warning(str(e))
 

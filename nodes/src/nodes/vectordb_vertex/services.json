@@ -1,7 +1,7 @@
 {
 	"title": "Vertex AI Vector Search",
 	"protocol": "vectordb_vertex://",
-	"classType": ["vector", "tool"],
+	"classType": ["store", "tool"],
 	"capabilities": ["noremote", "invoke"],
 	"register": "filter",
 	"node": "python",
@@ -12,8 +12,7 @@
 	"documentation": "https://docs.rocketride.org",
 	"invoke": {},
 	"lanes": {
-		"answers": [],
-		"questions": ["text", "answers"]
+		"answers": []
 	},
 	"preconfig": {
 		"default": "default",

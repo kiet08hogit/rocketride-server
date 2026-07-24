@@ -12,8 +12,7 @@
 	"documentation": "https://docs.rocketride.org",
 	"invoke": {},
 	"lanes": {
-		"answers": [],
-		"questions": ["text", "answers"]
+		"answers": []
 	},
 	"preconfig": {
 		"default": "default",

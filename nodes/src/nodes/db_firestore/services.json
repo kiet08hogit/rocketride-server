@@ -10,16 +10,9 @@
 	"description": ["A processing component that connects to Google Cloud Firestore (Datastore Mode or Native)."],
 	"icon": "db_firestore.svg",
 	"documentation": "https://docs.rocketride.org",
-	"invoke": {
-		"llm": {
-			"description": "LLM to use to craft NoSQL queries",
-			"min": 1,
-			"optional": true
-		}
-	},
+	"invoke": {},
 	"lanes": {
-		"answers": [],
-		"questions": ["table", "text", "answers"]
+		"answers": []
 	},
 	"preconfig": {
 		"default": "default",

@@ -1,0 +1,129 @@
+<details>
+<summary>🤖 Internal: Discord sync marker</summary>
+
+Auto-managed by the Discord notification workflow. Stores the linked Discord message ID and forum thread ID. Do not edit or delete.
+
+<!-- discord-msg-id:1525326382651932785 discord-thread-id:1525326381830111343 -->
+</details>
+<!-- This is an auto-generated comment: summarize by coderabbit.ai -->
+<!-- review_stack_entry_start -->
+
+[![Review Change Stack](https://storage.googleapis.com/coderabbit_public_assets/review-stack-in-coderabbit-ui.svg)](https://app.coderabbit.ai/change-stack/rocketride-org/rocketride-server/pull/1544?utm_source=github_walkthrough&utm_medium=github&utm_campaign=change_stack)
+
+<!-- review_stack_entry_end -->
+<!-- This is an auto-generated comment: review paused by coderabbit.ai -->
+
+> [!NOTE]
+> ## Reviews paused
+> 
+> It looks like this branch is under active development. To avoid overwhelming you with review comments due to an influx of new commits, CodeRabbit has automatically paused this review. You can configure this behavior by changing the `reviews.auto_review.auto_pause_after_reviewed_commits` setting.
+> 
+> Use the following commands to manage reviews:
+> - `@coderabbitai resume` to resume automatic reviews.
+> - `@coderabbitai review` to trigger a single review.
+> 
+> Use the checkboxes below for quick actions:
+> - [ ] <!-- {"checkboxId": "7f6cc2e2-2e4e-497a-8c31-c9e4573e93d1"} --> ▶️ Resume reviews
+> - [ ] <!-- {"checkboxId": "e9bb8d72-00e8-4f67-9cb2-caf3b22574fe"} --> 🔍 Trigger review
+
+<!-- end of auto-generated comment: review paused by coderabbit.ai -->
+<!-- walkthrough_start -->
+
+<details>
+<summary>📝 Walkthrough</summary>
+
+## Walkthrough
+
+Added shared invocation and streaming fallbacks that retry without `stop` when providers reject it. ChatBase paths now use these helpers, with tests covering recovery, successful calls, empty stop options, and unrelated errors.
+
+### Changes
+
+**Stop parameter compatibility**
+
+|Layer / File(s)|Summary|
+|---|---|
+|**Chat fallback implementation and integration** <br> `packages/ai/src/ai/common/chat.py`|Fallback helpers retry rejected invocation and streaming calls without `stop`; ChatBase routes its relevant paths through them.|
+|**Chat fallback validation** <br> `packages/ai/tests/ai/common/test_chat_fallback.py`|Mock LLMs and tests verify retries, preserved first-attempt arguments, successful output, empty-stop behavior, and non-retry of unrelated errors.|
+
+**Estimated code review effort:** 3 (Moderate) | ~20 minutes
+
+### Sequence Diagram(s)
+
+```mermaid
+sequenceDiagram
+  participant ChatBase
+  participant StopFallback
+  participant LLMBackend
+  ChatBase->>StopFallback: invoke or stream with stop
+  StopFallback->>LLMBackend: attempt call with stop
+  LLMBackend-->>StopFallback: unsupported stop error
+  StopFallback->>LLMBackend: retry without stop
+  LLMBackend-->>ChatBase: response or streamed chunks
+```
+
+**Suggested reviewers:** `jmaionchi`, `rod-christensen`, `stepmikhaylov`
+
+</details>
+
+<!-- walkthrough_end -->
+<!-- pre_merge_checks_walkthrough_start -->
+
+<details>
+<summary>🚥 Pre-merge checks | ✅ 4 | ❌ 1</summary>
+
+### ❌ Failed checks (1 warning)
+
+|     Check name     | Status     | Explanation                                                                           | Resolution                                                                         |
+| :----------------: | :--------- | :------------------------------------------------------------------------------------ | :--------------------------------------------------------------------------------- |
+| Docstring Coverage | ⚠️ Warning | Docstring coverage is 40.00% which is insufficient. The required threshold is 80.00%. | Write docstrings for the functions missing them to satisfy the coverage threshold. |
+
+<details>
+<summary>✅ Passed checks (4 passed)</summary>
+
+|         Check name         | Status   | Explanation                                                                                                                                         |
+| :------------------------: | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------- |
+|      Description Check     | ✅ Passed | Check skipped - CodeRabbit’s high-level summary is enabled.                                                                                         |
+|         Title check        | ✅ Passed | The title is specific and related to the stop-kwarg fallback change, though it doesn't mention the retry-on-unsupported-stop behavior.              |
+|     Linked Issues check    | ✅ Passed | The changes retry without stop on unsupported_parameter errors, preserve normal stop handling, and add regression tests for the failing agent path. |
+| Out of Scope Changes check | ✅ Passed | The diff stays focused on stop-parameter fallback logic and its tests, with no clear unrelated additions.                                           |
+
+</details>
+
+</details>
+
+<!-- pre_merge_checks_walkthrough_end -->
+<!-- finishing_touch_checkbox_start -->
+
+<details>
+<summary>✨ Finishing Touches</summary>
+
+<details>
+<summary>🧪 Generate unit tests (beta)</summary>
+
+- [ ] <!-- {"checkboxId": "f47ac10b-58cc-4372-a567-0e02b2c3d479", "radioGroupId": "utg-output-choice-group-unknown_comment_id"} -->   Create PR with unit tests
+
+</details>
+
+</details>
+
+<!-- finishing_touch_checkbox_end -->
+<!-- tips_start -->
+
+---
+
+Thanks for using [CodeRabbit](https://coderabbit.ai?utm_source=oss&utm_medium=github&utm_campaign=rocketride-org/rocketride-server&utm_content=1544)! It's free for OSS, and your support helps us grow. If you like it, consider giving us a shout-out.
+
+<details>
+<summary>❤️ Share</summary>
+
+- [X](https://twitter.com/intent/tweet?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A&url=https%3A//coderabbit.ai)
+- [Mastodon](https://mastodon.social/share?text=I%20just%20used%20%40coderabbitai%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20the%20proprietary%20code.%20Check%20it%20out%3A%20https%3A%2F%2Fcoderabbit.ai)
+- [Reddit](https://www.reddit.com/submit?title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&text=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code.%20Check%20it%20out%3A%20https%3A//coderabbit.ai)
+- [LinkedIn](https://www.linkedin.com/sharing/share-offsite/?url=https%3A%2F%2Fcoderabbit.ai&mini=true&title=Great%20tool%20for%20code%20review%20-%20CodeRabbit&summary=I%20just%20used%20CodeRabbit%20for%20my%20code%20review%2C%20and%20it%27s%20fantastic%21%20It%27s%20free%20for%20OSS%20and%20offers%20a%20free%20trial%20for%20proprietary%20code)
+
+</details>
+
+
+<sub>Comment `@coderabbitai help` to get the list of available commands.</sub>
+
+<!-- tips_end -->

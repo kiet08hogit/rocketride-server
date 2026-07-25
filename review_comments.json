@@ -1,0 +1,830 @@
+[
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291890",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291890,
+    "node_id": "PRRC_kwDOROCxS87SmcFy",
+    "diff_hunk": "@@ -0,0 +1 @@\n+# Connectors for authoritative overlay",
+    "path": "nodes/src/nodes/authoritative_overlay/connectors/__init__.py",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟠 Major_ | _⚡ Quick win_\n\n**Extract shared snapshot-loading logic.**\n\n`sec.py`, `ifrs.py`, `companies_house.py`, and `edinet.py` each duplicate the identical open/parse/except-log-None pattern, differing only by filename and log prefix. Consolidate into a single helper in this package (e.g. `_load_snapshot(regulator_name: str, filename: str)`) to avoid drift across four near-identical implementations.\n\n\n\n<details>\n<summary>♻️ Proposed shared helper</summary>\n\n```python\nimport json\nimport os\nfrom rocketlib import info\n\n\ndef load_snapshot(regulator_label: str, filename: str):\n    \"\"\"Load a local regulator snapshot JSON file, returning None on failure.\"\"\"\n    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', filename)\n    try:\n        with open(snapshot_path, 'r', encoding='utf-8') as f:\n            return json.load(f)\n    except Exception as e:\n        info(f'{regulator_label} snapshot not available: {e}')\n        return None\n```\nThen each connector becomes a one-liner, e.g. `query_sec = lambda extracted_text: load_snapshot('SEC', 'sec_snapshot.json')` or a thin wrapper function.\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/connectors/__init__.py` at line 1, The\nsnapshot-loading code is duplicated across the authoritative overlay connectors,\nso extract the shared open/parse/except-log-None flow into a helper in this\npackage such as _load_snapshot or load_snapshot. Update the SEC, IFRS, Companies\nHouse, and EDINET connector entry points to call that helper with just the\nregulator label and filename, keeping the existing log prefix behavior while\ncentralizing the file handling and error path.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:refactor_suggestion -->\n\n<!-- cr-comment:v1:19cf9d4000b8cf915a59d02f -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291890",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291890"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291890"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291890/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 1,
+    "original_line": 1,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 1,
+    "position": 1,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291894",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291894,
+    "node_id": "PRRC_kwDOROCxS87SmcF2",
+    "diff_hunk": "@@ -0,0 +1,79 @@\n+from rocketlib import IInstanceBase, Entry, warning, info\n+from ai.common.schema import Answer\n+from .IGlobal import IGlobal\n+\n+from .connectors.sec import query_sec\n+from .connectors.ifrs import query_ifrs\n+from .connectors.companies_house import query_companies_house\n+from .connectors.edinet import query_edinet\n+\n+\n+class IInstance(IInstanceBase):\n+    IGlobal: IGlobal\n+\n+    def __init__(self):\n+        super().__init__()\n+\n+    def open(self, entry: Entry):\n+        \"\"\"Reset per-object state.\"\"\"\n+        pass\n+\n+    def writeAnswers(self, answer: Answer):\n+        \"\"\"Run authoritative cross-check on the answer.\n+\n+        Extracts the answer text and attempts to verify it against the\n+        configured regulator database. If the official data does not match,\n+        the node abstains (drops the answer).\n+        \"\"\"\n+        regulator_type = self.IGlobal.regulator_type\n+        \n+        # Extract text from the answer. We expect this to contain a numeric financial figure.\n+        text = answer.getText() if answer else ''\n+        text = text.strip()\n+\n+        if not text:\n+            # Empty answer, just forward it\n+            self.instance.writeAnswers(answer)\n+            return\n+\n+        # Query the appropriate regulator for the official number based on the snapshot.\n+        official_data = None\n+        \n+        try:\n+            if regulator_type == 'sec':\n+                official_data = query_sec(text)\n+            elif regulator_type == 'ifrs':\n+                official_data = query_ifrs(text)\n+            elif regulator_type == 'companies_house':\n+                official_data = query_companies_house(text)\n+            elif regulator_type == 'edinet':\n+                official_data = query_edinet(text)\n+            else:\n+                warning(f\"Unknown regulator type: {regulator_type}\")\n+                # Forward since we can't verify\n+                self.instance.writeAnswers(answer)\n+                return\n+        except Exception as e:\n+            warning(f\"Failed to query {regulator_type} connector: {str(e)}\")\n+            self.preventDefault()\n+            return\n+\n+        if not official_data:\n+            warning(f\"Abstaining: Extracted value '{text}' not found in {regulator_type} authoritative data.\")\n+            self.preventDefault()\n+            return\n+\n+        # Simple verification: check if the exact text exists in the official data.\n+        # More advanced logic would parse numbers, handle formatting, scaling (thousands/millions), etc.\n+        if text not in str(official_data):\n+            warning(f\"Abstaining: Value mismatch. Extracted '{text}' does not match official data from {regulator_type}.\")\n+            self.preventDefault()\n+            return",
+    "path": "nodes/src/nodes/authoritative_overlay/IInstance.py",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_🎯 Functional Correctness_ | _🔵 Trivial_ | _🏗️ Heavy lift_\n\n**Verification logic is too weak for an audit-grade cross-check.**\n\nThe match check `text not in str(official_data)` (line 68) does a raw substring search against the stringified entire snapshot blob, and the connectors (e.g. `companies_house.py:5-12`, `sec.py:5-17`) never use `extracted_text` to narrow the lookup — they always return the whole local snapshot file regardless of what was extracted. Together this means:\n- False positives: any digit sequence that happens to appear anywhere in the blob (a date, ID, unrelated line item) will count as a \"match\".\n- False negatives: legitimate matches will be missed whenever formatting differs (commas, currency symbols, scale suffixes like \"in thousands\") — a limitation the code comment on lines 66-67 already acknowledges.\n\nFor a node whose stated purpose is authoritative cross-checking of financial figures, this materially undermines the guarantee it's meant to provide.\n\n\nConsider normalizing both sides (strip currency symbols/commas, parse to a numeric value) and comparing against specific fields the connector identifies, rather than substring-matching the whole serialized blob.\nDo you want me to draft a numeric-normalization helper and wire it through the connector contract?\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/IInstance.py` around lines 39 - 71, The\ncross-check in IInstance.process is too weak because it compares the extracted\nvalue against the entire stringified snapshot, and the connector helpers like\nquery_sec, query_ifrs, query_companies_house, and query_edinet ignore the\nextracted text entirely. Update the verification flow to use connector-specific\nlookup results or identified fields instead of a raw substring search, and\nnormalize values before comparing. In IInstance, replace the current text not in\nstr(official_data) check with a numeric-aware comparison that handles formatting\ndifferences such as commas, currency symbols, and scale suffixes.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:nitpick -->\n\n<!-- cr-comment:v1:c1347e9de058dc85cd849657 -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291894",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291894"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291894"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291894/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 39,
+    "original_start_line": 39,
+    "start_side": "RIGHT",
+    "line": 71,
+    "original_line": 71,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 71,
+    "position": 71,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291897",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291897,
+    "node_id": "PRRC_kwDOROCxS87SmcF5",
+    "diff_hunk": "@@ -0,0 +1,25 @@\n+# Authoritative Overlay Node\n+\n+Part of the **Audit-grade financial extraction node suite**.\n+\n+## Overview\n+The `authoritative_overlay` node is a pipeline filter designed to cross-check extracted financial numbers against official regulator data. \n+\n+Currently supported regulators include:\n+- US SEC (EDGAR)\n+- EU/UK IFRS\n+- UK Companies House\n+- Japan EDINET\n+\n+## Behavior\n+- **Input**: Pipeline `answers` (extracted financial data/numbers).\n+- **Process**: The node queries the configured regulator database for the official recorded value.\n+- **Output**: \n+  - If the extracted number matches the official data, the answer is forwarded downstream.\n+  - If there is a mismatch or no record is found, the node **abstains** by dropping the answer and logging a warning.\n+\n+## Configuration\n+See `services.json` for node configuration schemas.\n+\n+<!-- ROCKETRIDE:GENERATED:PARAMS START -->\n+<!-- ROCKETRIDE:GENERATED:PARAMS END -->",
+    "path": "nodes/src/nodes/authoritative_overlay/README.md",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Regenerate the README block and fix the heading spacing.**\n\nThe generated params section is still empty, so the README does not document the node’s actual config contract. Please re-run the docs generator, and add the blank lines required around the headings to satisfy MD022.      \n\nAs per path instructions, the README should stay in sync with the generated node contract.\n\n<details>\n<summary>🧰 Tools</summary>\n\n<details>\n<summary>🪛 markdownlint-cli2 (0.22.1)</summary>\n\n[warning] 5-5: Headings should be surrounded by blank lines\nExpected: 1; Actual: 0; Below\n\n(MD022, blanks-around-headings)\n\n---\n\n[warning] 14-14: Headings should be surrounded by blank lines\nExpected: 1; Actual: 0; Below\n\n(MD022, blanks-around-headings)\n\n---\n\n[warning] 21-21: Headings should be surrounded by blank lines\nExpected: 1; Actual: 0; Below\n\n(MD022, blanks-around-headings)\n\n</details>\n\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/README.md` around lines 1 - 25, The\nREADME for authoritative_overlay needs to be regenerated so the generated params\nblock reflects the node’s actual config contract instead of staying empty.\nRe-run the docs generator that populates the ROCKETRIDE:GENERATED:PARAMS\nsection, and ensure the markdown headings in the README have the required blank\nlines around them to satisfy MD022. Keep the documentation in sync with the node\nschema used by authoritative_overlay.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:triton:quartz -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:1ee7d74237835ab988cfcc65 -->\n\n_Sources: Path instructions, Linters/SAST tools_\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291897",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291897"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291897"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291897/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 1,
+    "original_start_line": 1,
+    "start_side": "RIGHT",
+    "line": 25,
+    "original_line": 25,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 25,
+    "position": 25,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291901",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291901,
+    "node_id": "PRRC_kwDOROCxS87SmcF9",
+    "diff_hunk": "@@ -0,0 +1,128 @@\n+{\n+\t\"title\": \"Authoritative Overlay\",\n+\t\"protocol\": \"authoritative-overlay://\",\n+\t\"classType\": [\n+\t\t\"guard\"\n+\t],\n+\t\"capabilities\": [\n+\t\t\"experimental\"\n+\t],\n+\t\"register\": \"filter\",\n+\t\"node\": \"python\",\n+\t\"path\": \"nodes.authoritative_overlay\",\n+\t\"prefix\": \"authoritative_overlay\",\n+\t\"description\": [\n+\t\t\"Cross-checks extracted financial numbers against official regulator data \",\n+\t\t\"(US SEC, EU/UK IFRS, UK Companies House, Japan EDINET). \",\n+\t\t\"Abstains (drops) the answer if there is no match.\"\n+\t],\n+\t\"icon\": \"util-guard.svg\",\n+\t\"lanes\": {\n+\t\t\"answers\": [\n+\t\t\t\"answers\"\n+\t\t]\n+\t},\n+\t\"preconfig\": {\n+\t\t\"default\": \"basic\",\n+\t\t\"profiles\": {\n+\t\t\t\"basic\": {\n+\t\t\t\t\"title\": \"Basic: US SEC (EDGAR)\",\n+\t\t\t\t\"regulator_type\": \"sec\"\n+\t\t\t}\n+\t\t}\n+\t},\n+\t\"fields\": {\n+\t\t\"regulator_type\": {\n+\t\t\t\"type\": \"string\",\n+\t\t\t\"title\": \"Regulator Source\",\n+\t\t\t\"description\": \"Which regulator database to cross-check against\",\n+\t\t\t\"default\": \"sec\",\n+\t\t\t\"enum\": [\n+\t\t\t\t[\n+\t\t\t\t\t\"sec\",\n+\t\t\t\t\t\"US SEC (EDGAR)\"\n+\t\t\t\t],\n+\t\t\t\t[\n+\t\t\t\t\t\"ifrs\",\n+\t\t\t\t\t\"EU/UK IFRS\"\n+\t\t\t\t],\n+\t\t\t\t[\n+\t\t\t\t\t\"companies_house\",\n+\t\t\t\t\t\"UK Companies House\"\n+\t\t\t\t],\n+\t\t\t\t[\n+\t\t\t\t\t\"edinet\",\n+\t\t\t\t\t\"Japan EDINET\"\n+\t\t\t\t]\n+\t\t\t]\n+\t\t},\n+\t\t\"authoritative_overlay.basic\": {\n+\t\t\t\"object\": \"basic\",\n+\t\t\t\"properties\": [\n+\t\t\t\t\"regulator_type\"\n+\t\t\t]\n+\t\t},\n+\t\t\"authoritative_overlay.profile\": {\n+\t\t\t\"title\": \"Profile\",\n+\t\t\t\"description\": \"Overlay profile\",\n+\t\t\t\"type\": \"string\",\n+\t\t\t\"default\": \"basic\",\n+\t\t\t\"enum\": [\n+\t\t\t\t\"*>preconfig.profiles.*.title\"\n+\t\t\t],\n+\t\t\t\"conditional\": [\n+\t\t\t\t{\n+\t\t\t\t\t\"value\": \"basic\",\n+\t\t\t\t\t\"properties\": [\n+\t\t\t\t\t\t\"authoritative_overlay.basic\"\n+\t\t\t\t\t]\n+\t\t\t\t}\n+\t\t\t]\n+\t\t}\n+\t},\n+\t\"shape\": [\n+\t\t{\n+\t\t\t\"section\": \"Pipe\",\n+\t\t\t\"title\": \"Authoritative Overlay\",\n+\t\t\t\"properties\": [\n+\t\t\t\t\"authoritative_overlay.profile\"\n+\t\t\t]\n+\t\t}\n+\t],\n+\t\"test\": {\n+\t\t\"profiles\": [\n+\t\t\t\"basic\"\n+\t\t],\n+\t\t\"cases\": [\n+\t\t\t{\n+\t\t\t\t\"answers\": {\n+\t\t\t\t\t\"answers\": [\n+\t\t\t\t\t\t{\n+\t\t\t\t\t\t\t\"text\": \"15000000\"\n+\t\t\t\t\t\t}\n+\t\t\t\t\t]\n+\t\t\t\t},\n+\t\t\t\t\"expect\": {\n+\t\t\t\t\t\"answers\": {\n+\t\t\t\t\t\t\"notEmpty\": true\n+\t\t\t\t\t}\n+\t\t\t\t}\n+\t\t\t},\n+\t\t\t{\n+\t\t\t\t\"answers\": {\n+\t\t\t\t\t\"answers\": [\n+\t\t\t\t\t\t{\n+\t\t\t\t\t\t\t\"text\": \"999999999\"\n+\t\t\t\t\t\t}\n+\t\t\t\t\t]\n+\t\t\t\t},\n+\t\t\t\t\"expect\": {\n+\t\t\t\t\t\"answers\": {\n+\t\t\t\t\t\t\"notEmpty\": false\n+\t\t\t\t\t}\n+\t\t\t\t}\n+\t\t\t}\n+\t\t]\n+\t}",
+    "path": "nodes/src/nodes/authoritative_overlay/services.json",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_\n\n**Test coverage only exercises the SEC path.**\n\nThe node supports 4 regulator types but the embedded test cases only cover `sec` via the default \"basic\" profile. Consider adding cases (with a profile override or additional preconfig profile) exercising `ifrs`, `companies_house`, and `edinet` to catch connector wiring regressions for those paths.\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/services.json` around lines 92 - 126,\nThe embedded tests in the authoritative overlay only validate the SEC connector\npath through the default basic profile, so add additional cases or profile\noverrides to exercise the ifrs, companies_house, and edinet regulator paths.\nUpdate the test fixture by referencing the existing test section and extend it\nwith profile-specific coverage that routes through the corresponding connector\nwiring, ensuring regressions in those non-sec paths are caught.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:nitpick -->\n\n<!-- cr-comment:v1:9bc8286c1073eec74805dfd4 -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291901",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291901"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291901"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291901/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 92,
+    "original_start_line": 92,
+    "start_side": "RIGHT",
+    "line": 126,
+    "original_line": 126,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 126,
+    "position": 126,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291904",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291904,
+    "node_id": "PRRC_kwDOROCxS87SmcGA",
+    "diff_hunk": "@@ -23,3 +23,10 @@ safetensors\n # Needed for dependencies compilations\n Cython\n versioneer\n+\n+# OCR base dependencies\n+img2table\n+# Explicit polars requirements\n+polars>=1.0.0\n+# Included explicitly for older/emulated CPUs without AVX2 (see depends.py)\n+polars-lts-cpu>=1.0.0",
+    "path": "nodes/src/nodes/requirements.txt",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_\n\n**Consider whether the AVX2-detection + dual-package approach is still needed given newer Polars runtime-selection extras.**\n\nRecent Polars releases ship a built-in runtime-selection mechanism (`polars[rtcompat]`) that auto-detects CPU capability at import time and picks the right compiled runtime, replacing the older split-package (`polars` vs `polars-lts-cpu`) approach entirely.\n\nPer the Polars changelog announcement: Historically, it was not possible to have packages depend on different Polars runtimes as they were built into different PyPI packages (e.g. polars-lts-cpu, polars-u64-index)... With the introduction of the runtimes, this will be resolved by Polars automatically and deterministically. Polars will load the most conservative runtime that is available on your system. Alternative runtimes can now be downloaded by setting the correct extras when installing Polars, for example: uv pip install \"polars[rtcompat]\".\n\nSince `polars>=1.0.0` is unbounded here, it's worth checking whether the pinned/resolved polars version already supports `[rtcompat]`, which could let this PR drop the custom `_is_x86_64_missing_avx2()` detection and excludes-file dance in favor of a single `polars[rtcompat]` (or plain extras-based) dependency line.\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/requirements.txt` around lines 30 - 32, The requirements\nsetup still uses the legacy split between polars and polars-lts-cpu plus custom\nAVX2 detection, but newer Polars versions may support runtime auto-selection via\nextras. Update the dependency handling around the requirements entry and the\nlogic in depends.py that branches on _is_x86_64_missing_avx2() to use the Polars\nrtcompat/runtime-selection mechanism if the resolved Polars version supports it,\nand remove the dual-package/excludes-file workaround if it is no longer needed.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:nitpick -->\n\n<!-- cr-comment:v1:6f126e5d759badd6e912f2e0 -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291904",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291904"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291904"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291904/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 30,
+    "original_start_line": 30,
+    "start_side": "RIGHT",
+    "line": 32,
+    "original_line": 32,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 10,
+    "position": 10,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291905",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291905,
+    "node_id": "PRRC_kwDOROCxS87SmcGB",
+    "diff_hunk": "@@ -654,6 +654,37 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+\n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return True\n+\n+    return False\n+",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Inconsistent fail-safe default for unrecognized OS.**\n\nEvery explicit branch (Darwin/Linux/Windows) fails closed to `True` on detection errors, but the fallthrough for an x86_64/amd64 host on an unrecognized OS (line 685) returns `False`, i.e., assumes AVX2 is present. This contradicts the conservative failure-mode used everywhere else and could select the non-lts `polars` build on an untested x86_64 platform that actually lacks AVX2.\n\n\n\n\n<details>\n<summary>🐛 Proposed fix</summary>\n\n```diff\n     elif system == 'Windows':\n         try:\n             import ctypes\n             # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n             return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n         except Exception:\n             return True\n\n-    return False\n+    # Unrecognized OS on x86_64/amd64: fail safe and assume AVX2 may be missing\n+    return True\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\ndef _is_x86_64_missing_avx2() -> bool:\n    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n    machine = platform.machine().lower()\n    if machine not in ('x86_64', 'amd64'):\n        return False\n\n    system = platform.system()\n    if system == 'Darwin':\n        # Check Rosetta or old Mac without AVX2\n        try:\n            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n            return output.strip() != '1'\n        except Exception:\n            return True\n    elif system == 'Linux':\n        try:\n            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n                return 'avx2' not in f.read()\n        except Exception:\n            return True\n    elif system == 'Windows':\n        try:\n            import ctypes\n            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n        except Exception:\n            return True\n\n    # Unrecognized OS on x86_64/amd64: fail safe and assume AVX2 may be missing\n    return True\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🧰 Tools</summary>\n\n<details>\n<summary>🪛 ast-grep (0.44.1)</summary>\n\n[error] 666-666: Avoid command injection\nContext: subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\nNote: [CWE-78] Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection').\n\n(command-injection-python)\n\n---\n\n[error] 666-666: Command coming from incoming request\nContext: subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\nNote: [CWE-78] Improper Neutralization of Special Elements used in an OS Command ('OS Command Injection').\n\n(subprocess-from-request)\n\n</details>\n\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@packages/server/engine-lib/rocketlib-python/lib/depends.py` around lines 657\n- 686, The _is_x86_64_missing_avx2 helper currently falls back to assuming AVX2\nis present on x86_64/amd64 when platform.system() is not Darwin, Linux, or\nWindows, which is inconsistent with the fail-closed behavior in the other\nbranches. Update the fallback in _is_x86_64_missing_avx2 to return the\nconservative missing-AVX2 result for unrecognized OSes, so the logic in the\npolars selection path errs on the safe side instead of choosing the non-lts\nbuild by default.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:3dd856e9709e6fe9db42de8b -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291905",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291905"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291905"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291905/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 657,
+    "original_start_line": 657,
+    "start_side": "RIGHT",
+    "line": 686,
+    "original_line": 686,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 33,
+    "position": 33,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291909",
+    "pull_request_review_id": 4641268432,
+    "id": 3533291909,
+    "node_id": "PRRC_kwDOROCxS87SmcGF",
+    "diff_hunk": "@@ -0,0 +1,93 @@\n+import os\n+import sys\n+import unittest\n+from unittest.mock import patch, mock_open, MagicMock\n+\n+# Add depends.py directory to path\n+DEPENDS_DIR = os.path.abspath(\n+    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'packages', 'server', 'engine-lib', 'rocketlib-python', 'lib')\n+)\n+sys.path.append(DEPENDS_DIR)\n+\n+# Mock engLib since it's a native/internal module unavailable during pure-python tests\n+sys.modules['engLib'] = MagicMock()\n+\n+import depends",
+    "path": "test/engine-lib/rocketlib-python/test_depends.py",
+    "commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "original_commit_id": "67c5c26271a9ea6e0232176266c8e307c7aa994e",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_\n\n**Global `sys.path`/`sys.modules` mutation without teardown risks cross-test pollution.**\n\n`sys.path.append(DEPENDS_DIR)` and `sys.modules['engLib'] = MagicMock()` are executed at module import time and never reverted. If this test module runs in the same pytest session as other tests that expect the real `engLib` module (or a differently-named `depends` module elsewhere on the path), those tests could silently pick up this mock/path entry for the rest of the session, causing hard-to-diagnose failures elsewhere.\n\n<details>\n<summary>♻️ Suggested fix: scope the mock/path with setUpModule/tearDownModule</summary>\n\n```diff\n-# Add depends.py directory to path\n-DEPENDS_DIR = os.path.abspath(\n-    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'packages', 'server', 'engine-lib', 'rocketlib-python', 'lib')\n-)\n-sys.path.append(DEPENDS_DIR)\n-\n-# Mock engLib since it's a native/internal module unavailable during pure-python tests\n-sys.modules['engLib'] = MagicMock()\n-\n-import depends\n+DEPENDS_DIR = os.path.abspath(\n+    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'packages', 'server', 'engine-lib', 'rocketlib-python', 'lib')\n+)\n+\n+depends = None\n+_engLib_patch = None\n+\n+\n+def setUpModule():\n+    global depends, _engLib_patch\n+    sys.path.append(DEPENDS_DIR)\n+    _engLib_patch = patch.dict('sys.modules', {'engLib': MagicMock()})\n+    _engLib_patch.start()\n+    import depends as _depends\n+    depends = _depends\n+\n+\n+def tearDownModule():\n+    _engLib_patch.stop()\n+    sys.path.remove(DEPENDS_DIR)\n+    sys.modules.pop('depends', None)\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n# Add depends.py directory to path\nDEPENDS_DIR = os.path.abspath(\n    os.path.join(os.path.dirname(__file__), '..', '..', '..', 'packages', 'server', 'engine-lib', 'rocketlib-python', 'lib')\n)\n\ndepends = None\n_engLib_patch = None\n\n\ndef setUpModule():\n    global depends, _engLib_patch\n    sys.path.append(DEPENDS_DIR)\n    _engLib_patch = patch.dict('sys.modules', {'engLib': MagicMock()})\n    _engLib_patch.start()\n    import depends as _depends\n    depends = _depends\n\n\ndef tearDownModule():\n    _engLib_patch.stop()\n    sys.path.remove(DEPENDS_DIR)\n    sys.modules.pop('depends', None)\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@test/engine-lib/rocketlib-python/test_depends.py` around lines 6 - 15, Move\nthe `sys.path` and `sys.modules['engLib']` setup in `test_depends.py` out of\nmodule import time and scope it with module-level setup/teardown so the test\nenvironment is restored after execution. Use `DEPENDS_DIR`, the `depends`\nimport, and the `engLib` mock as the points to wrap, and ensure both the path\nentry and the mocked module are removed/reverted in teardown to avoid leaking\nstate into other tests.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:nitpick -->\n\n<!-- cr-comment:v1:b6dd3ce8fd722524e7e26374 -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T02:58:56Z",
+    "updated_at": "2026-07-07T02:59:01Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291909",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291909"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533291909"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533291909/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 6,
+    "original_start_line": 6,
+    "start_side": "RIGHT",
+    "line": 15,
+    "original_line": 15,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 15,
+    "position": 15,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316604",
+    "pull_request_review_id": 4641301005,
+    "id": 3533316604,
+    "node_id": "PRRC_kwDOROCxS87SmiH8",
+    "diff_hunk": "@@ -0,0 +1,12 @@\n+import json\n+import os\n+from rocketlib import info\n+\n+def query_companies_house(extracted_text: str):\n+    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'companies_house_snapshot.json')\n+    try:\n+        with open(snapshot_path, 'r', encoding='utf-8') as f:\n+            return json.load(f)\n+    except Exception as e:\n+        info(f\"Companies House snapshot not available: {e}\")\n+        return None",
+    "path": "nodes/src/nodes/authoritative_overlay/connectors/companies_house.py",
+    "commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "original_commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Missing docstring and double-quoted string violate path instructions.**\n\n`query_companies_house` lacks a PEP 257 docstring, and the f-string on line 11 uses double quotes without an embedded apostrophe. As per path instructions, `nodes/**/*.py`: \"use single quotes, ruff for linting/formatting, PEP 257 docstrings, target Python 3.10+.\"\n\n\n\n\n<details>\n<summary>🔧 Proposed fix</summary>\n\n```diff\n def query_companies_house(extracted_text: str):\n+    \"\"\"Load the local Companies House snapshot, returning None on failure.\"\"\"\n     snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'companies_house_snapshot.json')\n     try:\n         with open(snapshot_path, 'r', encoding='utf-8') as f:\n             return json.load(f)\n     except Exception as e:\n-        info(f\"Companies House snapshot not available: {e}\")\n+        info(f'Companies House snapshot not available: {e}')\n         return None\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\ndef query_companies_house(extracted_text: str):\n    \"\"\"Load the local Companies House snapshot, returning None on failure.\"\"\"\n    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'companies_house_snapshot.json')\n    try:\n        with open(snapshot_path, 'r', encoding='utf-8') as f:\n            return json.load(f)\n    except Exception as e:\n        info(f'Companies House snapshot not available: {e}')\n        return None\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🧰 Tools</summary>\n\n<details>\n<summary>🪛 ast-grep (0.44.1)</summary>\n\n[warning] 7-7: File path is request-/variable-derived; validate and normalize to prevent path traversal.\nContext: open(snapshot_path, 'r', encoding='utf-8')\nNote: [CWE-22] Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal').\n\n(open-filename-from-request)\n\n</details>\n\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/connectors/companies_house.py` around\nlines 5 - 12, Add a PEP 257 docstring to query_companies_house describing its\nsnapshot lookup behavior, and update the logging string in the exception handler\nto follow the single-quote style used in nodes/**/*.py. Keep the existing logic\nintact while adjusting the query_companies_house function and its info(...)\nmessage to comply with the path instructions and Ruff formatting for Python\n3.10+.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:baa25e9c8b35a3cef89bb411 -->\n\n_Source: Path instructions_\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T03:05:40Z",
+    "updated_at": "2026-07-07T03:05:42Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316604",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316604"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316604"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316604/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 5,
+    "original_start_line": 5,
+    "start_side": "RIGHT",
+    "line": 12,
+    "original_line": 12,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 12,
+    "position": 12,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316616",
+    "pull_request_review_id": 4641301005,
+    "id": 3533316616,
+    "node_id": "PRRC_kwDOROCxS87SmiII",
+    "diff_hunk": "@@ -0,0 +1,12 @@\n+import json\n+import os\n+from rocketlib import info\n+\n+def query_edinet(extracted_text: str):\n+    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'edinet_snapshot.json')\n+    try:\n+        with open(snapshot_path, 'r', encoding='utf-8') as f:\n+            return json.load(f)\n+    except Exception as e:\n+        info(f\"EDINET snapshot not available: {e}\")\n+        return None",
+    "path": "nodes/src/nodes/authoritative_overlay/connectors/edinet.py",
+    "commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "original_commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Missing docstring and double-quoted string violate path instructions.**\n\nSame issue as the other connectors: `query_edinet` lacks a PEP 257 docstring and line 11's f-string uses double quotes unnecessarily. As per path instructions, `nodes/**/*.py`: \"use single quotes, ruff for linting/formatting, PEP 257 docstrings, target Python 3.10+.\"\n\n\n\n\n<details>\n<summary>🔧 Proposed fix</summary>\n\n```diff\n def query_edinet(extracted_text: str):\n+    \"\"\"Load the local EDINET snapshot, returning None on failure.\"\"\"\n     snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'edinet_snapshot.json')\n     try:\n         with open(snapshot_path, 'r', encoding='utf-8') as f:\n             return json.load(f)\n     except Exception as e:\n-        info(f\"EDINET snapshot not available: {e}\")\n+        info(f'EDINET snapshot not available: {e}')\n         return None\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\ndef query_edinet(extracted_text: str):\n    \"\"\"Load the local EDINET snapshot, returning None on failure.\"\"\"\n    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'edinet_snapshot.json')\n    try:\n        with open(snapshot_path, 'r', encoding='utf-8') as f:\n            return json.load(f)\n    except Exception as e:\n        info(f'EDINET snapshot not available: {e}')\n        return None\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🧰 Tools</summary>\n\n<details>\n<summary>🪛 ast-grep (0.44.1)</summary>\n\n[warning] 7-7: File path is request-/variable-derived; validate and normalize to prevent path traversal.\nContext: open(snapshot_path, 'r', encoding='utf-8')\nNote: [CWE-22] Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal').\n\n(open-filename-from-request)\n\n</details>\n\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/connectors/edinet.py` around lines 5 -\n12, The query_edinet helper in the EDINET connector is missing a PEP 257\ndocstring and uses a double-quoted f-string in its exception log. Add a concise\ndocstring to query_edinet describing its purpose, and change the info() message\nto use single quotes to match the connector style and lint rules. Keep the fix\nlocalized to query_edinet and its snapshot-loading try/except.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:74677162daf54d4d3694776a -->\n\n_Source: Path instructions_\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T03:05:41Z",
+    "updated_at": "2026-07-07T03:05:42Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316616",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316616"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316616"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316616/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 5,
+    "original_start_line": 5,
+    "start_side": "RIGHT",
+    "line": 12,
+    "original_line": 12,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 12,
+    "position": 12,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316627",
+    "pull_request_review_id": 4641301005,
+    "id": 3533316627,
+    "node_id": "PRRC_kwDOROCxS87SmiIT",
+    "diff_hunk": "@@ -0,0 +1,12 @@\n+import json\n+import os\n+from rocketlib import info\n+\n+def query_ifrs(extracted_text: str):\n+    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'ifrs_snapshot.json')\n+    try:\n+        with open(snapshot_path, 'r', encoding='utf-8') as f:\n+            return json.load(f)\n+    except Exception as e:\n+        info(f\"IFRS snapshot not available: {e}\")\n+        return None",
+    "path": "nodes/src/nodes/authoritative_overlay/connectors/ifrs.py",
+    "commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "original_commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Missing docstring and double-quoted string violate path instructions.**\n\nSame issue as the other connectors: `query_ifrs` lacks a PEP 257 docstring and line 11's f-string uses double quotes unnecessarily. As per path instructions, `nodes/**/*.py`: \"use single quotes, ruff for linting/formatting, PEP 257 docstrings, target Python 3.10+.\"\n\n\n\n\n<details>\n<summary>🔧 Proposed fix</summary>\n\n```diff\n def query_ifrs(extracted_text: str):\n+    \"\"\"Load the local IFRS snapshot, returning None on failure.\"\"\"\n     snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'ifrs_snapshot.json')\n     try:\n         with open(snapshot_path, 'r', encoding='utf-8') as f:\n             return json.load(f)\n     except Exception as e:\n-        info(f\"IFRS snapshot not available: {e}\")\n+        info(f'IFRS snapshot not available: {e}')\n         return None\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\ndef query_ifrs(extracted_text: str):\n    \"\"\"Load the local IFRS snapshot, returning None on failure.\"\"\"\n    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'ifrs_snapshot.json')\n    try:\n        with open(snapshot_path, 'r', encoding='utf-8') as f:\n            return json.load(f)\n    except Exception as e:\n        info(f'IFRS snapshot not available: {e}')\n        return None\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🧰 Tools</summary>\n\n<details>\n<summary>🪛 ast-grep (0.44.1)</summary>\n\n[warning] 7-7: File path is request-/variable-derived; validate and normalize to prevent path traversal.\nContext: open(snapshot_path, 'r', encoding='utf-8')\nNote: [CWE-22] Improper Limitation of a Pathname to a Restricted Directory ('Path Traversal').\n\n(open-filename-from-request)\n\n</details>\n\n</details>\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/connectors/ifrs.py` around lines 5 -\n12, `query_ifrs` in the IFRS connector needs to follow the Python path\nconventions: add a PEP 257 docstring to the function and update the logging\nstring in the exception handler to use single quotes instead of double quotes.\nKeep the existing behavior intact while aligning the `query_ifrs` implementation\nwith the `nodes/**/*.py` style rules and Ruff/formatting expectations.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:7838d120a01bd78c76816582 -->\n\n_Source: Path instructions_\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T03:05:41Z",
+    "updated_at": "2026-07-07T03:05:42Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316627",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316627"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316627"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316627/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 5,
+    "original_start_line": 5,
+    "start_side": "RIGHT",
+    "line": 12,
+    "original_line": 12,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 12,
+    "position": 12,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316634",
+    "pull_request_review_id": 4641301005,
+    "id": 3533316634,
+    "node_id": "PRRC_kwDOROCxS87SmiIa",
+    "diff_hunk": "@@ -0,0 +1,17 @@\n+import json\n+import os\n+from rocketlib import info\n+\n+def query_sec(extracted_text: str):\n+    \"\"\"\n+    Simulates querying the US SEC EDGAR database by reading a local snapshot.\n+    Returns the loaded snapshot data, or None if not found.\n+    \"\"\"\n+    snapshot_path = os.path.join(os.path.dirname(__file__), '..', 'testdata', 'sec_snapshot.json')\n+    try:\n+        with open(snapshot_path, 'r', encoding='utf-8') as f:\n+            data = json.load(f)\n+            return data\n+    except Exception as e:\n+        info(f\"SEC snapshot not available: {e}\")",
+    "path": "nodes/src/nodes/authoritative_overlay/connectors/sec.py",
+    "commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "original_commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_📐 Maintainability & Code Quality_ | _🟡 Minor_ | _⚡ Quick win_\n\n**Double-quoted f-string violates single-quote convention.**\n\nAs per path instructions, `nodes/**/*.py`: \"use single quotes, ruff for linting/formatting, PEP 257 docstrings, target Python 3.10+.\"\n\n\n\n\n<details>\n<summary>🔧 Proposed fix</summary>\n\n```diff\n-        info(f\"SEC snapshot not available: {e}\")\n+        info(f'SEC snapshot not available: {e}')\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n        info(f'SEC snapshot not available: {e}')\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/connectors/sec.py` at line 16, The\n`info` log in `sec.py` uses a double-quoted f-string, which violates the\nsingle-quote convention for `nodes/**/*.py`. Update the logging statement in the\nSEC snapshot handling path to use single quotes while keeping the same message\nand interpolated error variable `e`; this is the only change needed in that\nblock.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:29139d7fcd7c1d83ce3fcfc0 -->\n\n_Source: Path instructions_\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T03:05:41Z",
+    "updated_at": "2026-07-07T03:05:42Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316634",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316634"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316634"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316634/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 16,
+    "original_line": 16,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 16,
+    "position": 16,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316637",
+    "pull_request_review_id": 4641301005,
+    "id": 3533316637,
+    "node_id": "PRRC_kwDOROCxS87SmiId",
+    "diff_hunk": "@@ -0,0 +1,79 @@\n+from rocketlib import IInstanceBase, Entry, warning, info\n+from ai.common.schema import Answer\n+from .IGlobal import IGlobal\n+\n+from .connectors.sec import query_sec\n+from .connectors.ifrs import query_ifrs\n+from .connectors.companies_house import query_companies_house\n+from .connectors.edinet import query_edinet\n+\n+\n+class IInstance(IInstanceBase):\n+    IGlobal: IGlobal\n+\n+    def __init__(self):\n+        super().__init__()\n+\n+    def open(self, entry: Entry):\n+        \"\"\"Reset per-object state.\"\"\"\n+        pass\n+\n+    def writeAnswers(self, answer: Answer):\n+        \"\"\"Run authoritative cross-check on the answer.\n+\n+        Extracts the answer text and attempts to verify it against the\n+        configured regulator database. If the official data does not match,\n+        the node abstains (drops the answer).\n+        \"\"\"\n+        regulator_type = self.IGlobal.regulator_type\n+        \n+        # Extract text from the answer. We expect this to contain a numeric financial figure.\n+        text = answer.getText() if answer else ''\n+        text = text.strip()\n+\n+        if not text:\n+            # Empty answer, just forward it\n+            self.instance.writeAnswers(answer)\n+            return\n+\n+        # Query the appropriate regulator for the official number based on the snapshot.\n+        official_data = None\n+        \n+        try:\n+            if regulator_type == 'sec':\n+                official_data = query_sec(text)\n+            elif regulator_type == 'ifrs':\n+                official_data = query_ifrs(text)\n+            elif regulator_type == 'companies_house':\n+                official_data = query_companies_house(text)\n+            elif regulator_type == 'edinet':\n+                official_data = query_edinet(text)\n+            else:\n+                warning(f\"Unknown regulator type: {regulator_type}\")\n+                # Forward since we can't verify\n+                self.instance.writeAnswers(answer)\n+                return",
+    "path": "nodes/src/nodes/authoritative_overlay/IInstance.py",
+    "commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "original_commit_id": "3fd2fe19a38fb11046a3c80caadc27e6b2fd0526",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_🎯 Functional Correctness_ | _🟠 Major_ | _⚡ Quick win_\n\n**Fail-open on unknown `regulator_type` undermines the audit-grade guarantee.**\n\nWhen `regulator_type` is unrecognized, the answer is forwarded unverified instead of abstaining. For a node whose purpose is to cross-check figures against authoritative regulator data, a misconfiguration (bad/unsupported `regulator_type`) should arguably fail closed (abstain) rather than silently pass unverified answers through.\n\n\n\n\n<details>\n<summary>🔧 Proposed fix</summary>\n\n```diff\n             else:\n                 warning(f\"Unknown regulator type: {regulator_type}\")\n-                # Forward since we can't verify\n-                self.instance.writeAnswers(answer)\n+                # Fail closed: abstain rather than forward an unverified answer\n+                self.preventDefault()\n                 return\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n            else:\n                warning(f\"Unknown regulator type: {regulator_type}\")\n                # Fail closed: abstain rather than forward an unverified answer\n                self.preventDefault()\n                return\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@nodes/src/nodes/authoritative_overlay/IInstance.py` around lines 51 - 55, The\nunknown regulator_type branch in IInstance should not forward unverified\nanswers; change the fallback in the answer-handling path to fail closed by\nabstaining instead of calling self.instance.writeAnswers(answer). Update the\nlogic around the regulator_type dispatch in IInstance so that unrecognized\nvalues log the warning and stop processing, keeping the authoritative_overlay\nnode’s behavior conservative by default.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:beignet -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:3bed7e0b0144b02a01e18fe6 -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-07T03:05:41Z",
+    "updated_at": "2026-07-07T03:05:43Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316637",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316637"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1485#discussion_r3533316637"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1485"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3533316637/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 51,
+    "original_start_line": 51,
+    "start_side": "RIGHT",
+    "line": 55,
+    "original_line": 55,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 55,
+    "position": 55,
+    "subject_type": "line"
+  }
+]

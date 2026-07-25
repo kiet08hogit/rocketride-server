@@ -1,0 +1,347 @@
+[
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3502837590",
+    "pull_request_review_id": 4605231036,
+    "id": 3502837590,
+    "node_id": "PRRC_kwDOROCxS87QyQ9W",
+    "diff_hunk": "@@ -654,14 +654,52 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+        \n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return False\n+            \n+    return False\n+\n+\n def _combine_requirements(file_paths: list[str], output_path: str):\n     \"\"\"Concatenate all requirement files into one.\"\"\"\n+    needs_polars_override = False\n     with open(output_path, 'w', encoding='utf-8') as out:\n         for path in file_paths:\n             out.write(f'# Source: {path}\\n')\n             with open(path, 'r', encoding='utf-8') as inp:\n-                out.write(inp.read())\n+                content = inp.read()\n+                if 'img2table' in content or 'polars' in content:\n+                    needs_polars_override = _is_x86_64_missing_avx2()",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "original_commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "user": {
+      "login": "coderabbitai[bot]",
+      "id": 136622811,
+      "node_id": "BOT_kgDOCCSy2w",
+      "avatar_url": "https://avatars.githubusercontent.com/in/347564?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/coderabbitai%5Bbot%5D",
+      "html_url": "https://github.com/apps/coderabbitai",
+      "followers_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/followers",
+      "following_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/following{/other_user}",
+      "gists_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/subscriptions",
+      "organizations_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/orgs",
+      "repos_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/repos",
+      "events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/coderabbitai%5Bbot%5D/received_events",
+      "type": "Bot",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "_🩺 Stability & Availability_ | _🟠 Major_ | _⚡ Quick win_\n\n**Ignore commented lines when deciding whether to inject `polars-lts-cpu`.**\n\nLine 696 scans raw file text, so the new comment in `nodes/src/nodes/ocr/requirements.txt` still matches `img2table`. On AVX2-less hosts, importing `nodes/src/nodes/ocr/IGlobal.py` will therefore append `polars-lts-cpu` even though that file no longer declares any installable packages, which reintroduces an in-process Polars install on the OCR path this PR is trying to remove.\n\n<details>\n<summary>Suggested fix</summary>\n\n```diff\n def _combine_requirements(file_paths: list[str], output_path: str):\n     \"\"\"Concatenate all requirement files into one.\"\"\"\n     needs_polars_override = False\n     with open(output_path, 'w', encoding='utf-8') as out:\n         for path in file_paths:\n             out.write(f'# Source: {path}\\n')\n             with open(path, 'r', encoding='utf-8') as inp:\n                 content = inp.read()\n-                if 'img2table' in content or 'polars' in content:\n-                    needs_polars_override = _is_x86_64_missing_avx2()\n+                requirement_lines = [\n+                    line.split('#', 1)[0].strip().lower()\n+                    for line in content.splitlines()\n+                ]\n+                has_polars_trigger = any(\n+                    line == 'img2table'\n+                    or line.startswith('img2table[')\n+                    or line.startswith('img2table=')\n+                    or line == 'polars'\n+                    or line.startswith('polars[')\n+                    or line.startswith('polars=')\n+                    for line in requirement_lines\n+                    if line\n+                )\n+                if has_polars_trigger:\n+                    needs_polars_override = (\n+                        needs_polars_override or _is_x86_64_missing_avx2()\n+                    )\n                 out.write(content)\n             out.write('\\n')\n```\n</details>\n\n<!-- suggestion_start -->\n\n<details>\n<summary>📝 Committable suggestion</summary>\n\n> ‼️ **IMPORTANT**\n> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.\n\n```suggestion\n                content = inp.read()\n                requirement_lines = [\n                    line.split('#', 1)[0].strip().lower()\n                    for line in content.splitlines()\n                ]\n                has_polars_trigger = any(\n                    line == 'img2table'\n                    or line.startswith('img2table[')\n                    or line.startswith('img2table=')\n                    or line == 'polars'\n                    or line.startswith('polars[')\n                    or line.startswith('polars=')\n                    for line in requirement_lines\n                    if line\n                )\n                if has_polars_trigger:\n                    needs_polars_override = (\n                        needs_polars_override or _is_x86_64_missing_avx2()\n                    )\n```\n\n</details>\n\n<!-- suggestion_end -->\n\n<details>\n<summary>🤖 Prompt for AI Agents</summary>\n\n```\nVerify each finding against current code. Fix only still-valid issues, skip the\nrest with a brief reason, keep changes minimal, and validate.\n\nIn `@packages/server/engine-lib/rocketlib-python/lib/depends.py` around lines 695\n- 697, The package-detection logic in depends.py is matching commented text,\nwhich can incorrectly trigger the polars-lts-cpu override. Update the\nfile-content scan in the relevant import path handling so commented lines are\nignored before checking for img2table or polars, and keep the decision inside\nthe existing needs_polars_override flow used by _is_x86_64_missing_avx2(). This\nshould prevent requirements files like nodes/src/nodes/ocr/requirements.txt from\ncausing an override when they no longer declare installable packages.\n```\n\n</details>\n\n<!-- fingerprinting:phantom:poseidon:grasshopper -->\n\n<!-- cr-indicator-types:potential_issue -->\n\n<!-- cr-comment:v1:1cc40d882f6c424a56a19a7b -->\n\n<!-- This is an auto-generated comment by CodeRabbit -->",
+    "created_at": "2026-07-01T02:09:22Z",
+    "updated_at": "2026-07-01T02:09:23Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3502837590",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3502837590"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3502837590"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3502837590/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": 695,
+    "original_start_line": 695,
+    "start_side": "RIGHT",
+    "line": 697,
+    "original_line": 697,
+    "side": "RIGHT",
+    "author_association": "CONTRIBUTOR",
+    "original_position": 45,
+    "position": 45,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446194",
+    "pull_request_review_id": 4612178491,
+    "id": 3508446194,
+    "node_id": "PRRC_kwDOROCxS87RHqPy",
+    "diff_hunk": "@@ -654,14 +654,52 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+        \n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return False\n+            \n+    return False\n+\n+\n def _combine_requirements(file_paths: list[str], output_path: str):\n     \"\"\"Concatenate all requirement files into one.\"\"\"\n+    needs_polars_override = False\n     with open(output_path, 'w', encoding='utf-8') as out:\n         for path in file_paths:\n             out.write(f'# Source: {path}\\n')\n             with open(path, 'r', encoding='utf-8') as inp:\n-                out.write(inp.read())\n+                content = inp.read()\n+                if 'img2table' in content or 'polars' in content:\n+                    needs_polars_override = _is_x86_64_missing_avx2()\n+                out.write(content)\n             out.write('\\n')\n+            \n+        if needs_polars_override:\n+            out.write('\\n# Injected to support older/emulated CPUs without AVX2\\npolars-lts-cpu\\n')",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "original_commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "user": {
+      "login": "asclearuc",
+      "id": 29624014,
+      "node_id": "MDQ6VXNlcjI5NjI0MDE0",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29624014?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/asclearuc",
+      "html_url": "https://github.com/asclearuc",
+      "followers_url": "https://api.github.com/users/asclearuc/followers",
+      "following_url": "https://api.github.com/users/asclearuc/following{/other_user}",
+      "gists_url": "https://api.github.com/users/asclearuc/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/asclearuc/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/asclearuc/subscriptions",
+      "organizations_url": "https://api.github.com/users/asclearuc/orgs",
+      "repos_url": "https://api.github.com/users/asclearuc/repos",
+      "events_url": "https://api.github.com/users/asclearuc/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/asclearuc/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "**MUST fix — `polars-lts-cpu` is injected into the compile input, not the install input, so it is never installed.**\n\n`_combine_requirements` writes `combined.txt`, which is consumed only by `_compile_constraints` (`uv pip compile`). Install does not read this file — `_install_requirements` installs each individual requirements file with `-r`, plus the constraints via `-c`. A constraints file only pins a version *if* a package is installed; it never causes an install.\n\nSo on a non-AVX2 host:\n1. `polars` is excluded (line 808) → not installed.\n2. `polars-lts-cpu` lives only in the compile/constraints output → nothing in the install set requires it → not installed.\n3. `img2table` then has no Polars backend → `import polars` in `nodes/src/nodes/ocr/IGlobal.py` fails (or resolution fails because the required `polars` is excluded and unprovided).\n\nCompare the existing `onnxruntime` handling: the replacement variant `onnxruntime-gpu` is an explicit line in a real requirements file (e.g. `nodes/src/nodes/anonymize/requirements.txt`), and plain `onnxruntime` is excluded. The excluded package is only safe to exclude because the replacement is explicitly installed. `polars-lts-cpu` needs the same: it must appear in a file the install step reads, not only in the compile input.\n\nNote: this branch is dead code on any AVX2 machine, so a local test on a normal dev box passes without ever exercising it.",
+    "created_at": "2026-07-01T19:07:51Z",
+    "updated_at": "2026-07-01T19:13:10Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446194",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446194"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446194"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446194/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 702,
+    "original_line": 702,
+    "side": "RIGHT",
+    "author_association": "COLLABORATOR",
+    "original_position": 50,
+    "position": 50,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446196",
+    "pull_request_review_id": 4612178491,
+    "id": 3508446196,
+    "node_id": "PRRC_kwDOROCxS87RHqP0",
+    "diff_hunk": "@@ -654,14 +654,52 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+        \n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return False",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "original_commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "user": {
+      "login": "asclearuc",
+      "id": 29624014,
+      "node_id": "MDQ6VXNlcjI5NjI0MDE0",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29624014?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/asclearuc",
+      "html_url": "https://github.com/asclearuc",
+      "followers_url": "https://api.github.com/users/asclearuc/followers",
+      "following_url": "https://api.github.com/users/asclearuc/following{/other_user}",
+      "gists_url": "https://api.github.com/users/asclearuc/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/asclearuc/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/asclearuc/subscriptions",
+      "organizations_url": "https://api.github.com/users/asclearuc/orgs",
+      "repos_url": "https://api.github.com/users/asclearuc/repos",
+      "events_url": "https://api.github.com/users/asclearuc/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/asclearuc/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "**should fix — On Windows a detection error defaults to the unsafe direction.**\n\nDarwin and Linux return `True` on error (assume AVX2 missing → use the safe `polars-lts-cpu`). Windows returns `False` (assume AVX2 present → use standard `polars`). Installing `polars-lts-cpu` on an AVX2 machine only costs a little speed; installing standard `polars` on a non-AVX2 machine crashes with \"Illegal instruction\". So the safe default on failure is `True` on every platform.\n\n```suggestion\n            return True\n```",
+    "created_at": "2026-07-01T19:07:51Z",
+    "updated_at": "2026-07-01T19:13:10Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446196",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446196"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446196"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446196/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 683,
+    "original_line": 683,
+    "side": "RIGHT",
+    "author_association": "COLLABORATOR",
+    "original_position": 30,
+    "position": 30,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446210",
+    "pull_request_review_id": 4612178491,
+    "id": 3508446210,
+    "node_id": "PRRC_kwDOROCxS87RHqQC",
+    "diff_hunk": "@@ -654,14 +654,52 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+        \n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return False\n+            \n+    return False\n+\n+\n def _combine_requirements(file_paths: list[str], output_path: str):\n     \"\"\"Concatenate all requirement files into one.\"\"\"\n+    needs_polars_override = False\n     with open(output_path, 'w', encoding='utf-8') as out:\n         for path in file_paths:\n             out.write(f'# Source: {path}\\n')\n             with open(path, 'r', encoding='utf-8') as inp:\n-                out.write(inp.read())\n+                content = inp.read()\n+                if 'img2table' in content or 'polars' in content:\n+                    needs_polars_override = _is_x86_64_missing_avx2()",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "original_commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "user": {
+      "login": "asclearuc",
+      "id": 29624014,
+      "node_id": "MDQ6VXNlcjI5NjI0MDE0",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29624014?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/asclearuc",
+      "html_url": "https://github.com/asclearuc",
+      "followers_url": "https://api.github.com/users/asclearuc/followers",
+      "following_url": "https://api.github.com/users/asclearuc/following{/other_user}",
+      "gists_url": "https://api.github.com/users/asclearuc/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/asclearuc/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/asclearuc/subscriptions",
+      "organizations_url": "https://api.github.com/users/asclearuc/orgs",
+      "repos_url": "https://api.github.com/users/asclearuc/repos",
+      "events_url": "https://api.github.com/users/asclearuc/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/asclearuc/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "**should fix — The trigger scans raw file text, including comments.**\n\n`content` is the whole file, so `'img2table' in content` also matches comment text. After this PR, `nodes/src/nodes/ocr/requirements.txt` declares no installable package but its comment still contains `img2table`, so the check still fires. `'polars' in content` is similarly loose (matches comments, or the injected `polars-lts-cpu` line on a rebuild). Parse each line, strip the `#` comment, and compare the package name exactly. CodeRabbit posted a concrete `requirement_lines` / `has_polars_trigger` suggestion on this line — please apply that shape.",
+    "created_at": "2026-07-01T19:07:52Z",
+    "updated_at": "2026-07-01T19:13:10Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446210",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446210"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446210"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446210/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 697,
+    "original_line": 697,
+    "side": "RIGHT",
+    "author_association": "COLLABORATOR",
+    "original_position": 45,
+    "position": 45,
+    "subject_type": "line"
+  },
+  {
+    "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446219",
+    "pull_request_review_id": 4612178491,
+    "id": 3508446219,
+    "node_id": "PRRC_kwDOROCxS87RHqQL",
+    "diff_hunk": "@@ -654,14 +654,52 @@ def _save_hash(hash_file: str, hash_value: str):\n         f.write(hash_value)\n \n \n+def _is_x86_64_missing_avx2() -> bool:\n+    \"\"\"Check if CPU is x86_64 but lacks AVX2 (e.g. Rosetta 2 or old Intel).\"\"\"\n+    machine = platform.machine().lower()\n+    if machine not in ('x86_64', 'amd64'):\n+        return False\n+        \n+    system = platform.system()\n+    if system == 'Darwin':\n+        # Check Rosetta or old Mac without AVX2\n+        try:\n+            output = subprocess.check_output(['sysctl', '-n', 'hw.optional.avx2_0'], text=True)\n+            return output.strip() != '1'\n+        except Exception:\n+            return True\n+    elif system == 'Linux':\n+        try:\n+            with open('/proc/cpuinfo', 'r', encoding='utf-8') as f:\n+                return 'avx2' not in f.read()\n+        except Exception:\n+            return True\n+    elif system == 'Windows':\n+        try:\n+            import ctypes\n+            # PF_AVX2_INSTRUCTIONS_AVAILABLE is 40\n+            return not ctypes.windll.kernel32.IsProcessorFeaturePresent(40)\n+        except Exception:\n+            return False\n+            \n+    return False\n+\n+\n def _combine_requirements(file_paths: list[str], output_path: str):\n     \"\"\"Concatenate all requirement files into one.\"\"\"\n+    needs_polars_override = False\n     with open(output_path, 'w', encoding='utf-8') as out:\n         for path in file_paths:\n             out.write(f'# Source: {path}\\n')\n             with open(path, 'r', encoding='utf-8') as inp:\n-                out.write(inp.read())\n+                content = inp.read()\n+                if 'img2table' in content or 'polars' in content:\n+                    needs_polars_override = _is_x86_64_missing_avx2()\n+                out.write(content)\n             out.write('\\n')\n+            ",
+    "path": "packages/server/engine-lib/rocketlib-python/lib/depends.py",
+    "commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "original_commit_id": "762ccb5d09ddf9af0af6368e68c2ad1392a205bb",
+    "user": {
+      "login": "asclearuc",
+      "id": 29624014,
+      "node_id": "MDQ6VXNlcjI5NjI0MDE0",
+      "avatar_url": "https://avatars.githubusercontent.com/u/29624014?v=4",
+      "gravatar_id": "",
+      "url": "https://api.github.com/users/asclearuc",
+      "html_url": "https://github.com/asclearuc",
+      "followers_url": "https://api.github.com/users/asclearuc/followers",
+      "following_url": "https://api.github.com/users/asclearuc/following{/other_user}",
+      "gists_url": "https://api.github.com/users/asclearuc/gists{/gist_id}",
+      "starred_url": "https://api.github.com/users/asclearuc/starred{/owner}{/repo}",
+      "subscriptions_url": "https://api.github.com/users/asclearuc/subscriptions",
+      "organizations_url": "https://api.github.com/users/asclearuc/orgs",
+      "repos_url": "https://api.github.com/users/asclearuc/repos",
+      "events_url": "https://api.github.com/users/asclearuc/events{/privacy}",
+      "received_events_url": "https://api.github.com/users/asclearuc/received_events",
+      "type": "User",
+      "user_view_type": "public",
+      "site_admin": false
+    },
+    "body": "**nit — Trailing whitespace on new blank lines (ruff W293).**\n\nSeveral new blank lines carry spaces (here, and near lines 662, 684, 805). `ruff check` will fail. Run `python -m ruff format packages/server/engine-lib/rocketlib-python/lib/depends.py` before pushing.",
+    "created_at": "2026-07-01T19:07:52Z",
+    "updated_at": "2026-07-01T19:13:11Z",
+    "html_url": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446219",
+    "pull_request_url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376",
+    "_links": {
+      "self": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446219"
+      },
+      "html": {
+        "href": "https://github.com/rocketride-org/rocketride-server/pull/1376#discussion_r3508446219"
+      },
+      "pull_request": {
+        "href": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/1376"
+      }
+    },
+    "reactions": {
+      "url": "https://api.github.com/repos/rocketride-org/rocketride-server/pulls/comments/3508446219/reactions",
+      "total_count": 0,
+      "+1": 0,
+      "-1": 0,
+      "laugh": 0,
+      "hooray": 0,
+      "confused": 0,
+      "heart": 0,
+      "rocket": 0,
+      "eyes": 0
+    },
+    "start_line": null,
+    "original_start_line": null,
+    "start_side": null,
+    "line": 700,
+    "original_line": 700,
+    "side": "RIGHT",
+    "author_association": "COLLABORATOR",
+    "original_position": 48,
+    "position": 48,
+    "subject_type": "line"
+  }
+]

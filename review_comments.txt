@@ -1,0 +1,435 @@
+_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_
+
+**Tighten the assertion in `test_both_empty_yields_empty`.**
+
+`_resolve_stop(None, [])` always returns `[]` (since `None or []` evaluates to `[]`), so the `or result is None` branch is dead code. The assertion should be exact. Additionally, the test name says "both empty" but passes `None` as the first argument — consider also testing `_resolve_stop([], [])` or renaming.
+
+
+
+
+<details>
+<summary>🧪 Proposed fix</summary>
+
+```diff
+ def test_both_empty_yields_empty(self):
+-    result = _resolve_stop(None, [])
+-    assert result == [] or result is None  # either is acceptable (no stop)
++    # None (key absent) and [] (explicit empty) both resolve to no stop.
++    assert _resolve_stop(None, []) == []
++    assert _resolve_stop([], []) == []
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+    def test_both_empty_yields_empty(self):
+        # None (key absent) and [] (explicit empty) both resolve to no stop.
+        assert _resolve_stop(None, []) == []
+        assert _resolve_stop([], []) == []
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@nodes/test/agent_crewai/test_stop_words.py` around lines 399 - 401, In
+test_both_empty_yields_empty, replace the permissive assertion with an exact
+result == [] check. Align the test name and coverage by either renaming it to
+reflect a None and empty-list input or adding a separate assertion/test for
+_resolve_stop([], []).
+```
+
+</details>
+
+<!-- cr-indicator-types:potential_issue -->
+
+<!-- cr-comment:v1:fb4facc5cbced930422f6141 -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+_🩺 Stability & Availability_ | _🟡 Minor_ | _⚡ Quick win_
+
+**Move `llm.stream()` inside the try block for consistency and robustness.**
+
+The `llm.stream()` call on line 55 is outside the try block. If `stream()` raises synchronously (e.g., a backend validates parameters before returning a generator), the exception won't be caught and the stop-parameter retry won't happen. This is inconsistent with `_invoke_with_stop_fallback` where `llm.invoke()` is inside the try. For LangChain backends (generator functions), the error occurs on `next(it)` inside the try, so this works in practice — but moving it inside makes both helpers consistent and covers synchronous-failure backends.
+
+
+
+
+<details>
+<summary>Proposed fix</summary>
+
+```diff
+ def _stream_with_stop_fallback(llm, prompt, stop_kwargs):
+     """Stream from the LLM, but fallback to no stop kwargs if the API rejects them."""
+-    it = llm.stream(prompt, **stop_kwargs)
+     try:
++        it = llm.stream(prompt, **stop_kwargs)
+         first = next(it)
+         yield first
+         yield from it
+     except StopIteration:
+         return
+```
+</details>
+
+<!-- suggestion_start -->
+
+<details>
+<summary>📝 Committable suggestion</summary>
+
+> ‼️ **IMPORTANT**
+> Carefully review the code before committing. Ensure that it accurately replaces the highlighted code, contains no missing lines, and has no issues with indentation. Thoroughly test & benchmark the code to ensure it meets the requirements.
+
+```suggestion
+def _stream_with_stop_fallback(llm, prompt, stop_kwargs):
+    """Stream from the LLM, but fallback to no stop kwargs if the API rejects them."""
+    try:
+        it = llm.stream(prompt, **stop_kwargs)
+        first = next(it)
+        yield first
+        yield from it
+    except StopIteration:
+        return
+    except Exception as e:
+        err_str = str(e).lower()
+        if stop_kwargs and 'stop' in err_str and ('unsupported' in err_str or 'invalid' in err_str):
+            warning(f"LLM rejected 'stop' parameter: {e}. Retrying stream without stop.")
+            yield from llm.stream(prompt)
+        else:
+            raise
+```
+
+</details>
+
+<!-- suggestion_end -->
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/src/ai/common/chat.py` around lines 53 - 68, Move the
+llm.stream(prompt, **stop_kwargs) call inside the try block of
+_stream_with_stop_fallback, keeping iterator consumption and fallback handling
+within the same exception scope so synchronous stream creation errors trigger
+the existing stop-parameter retry logic.
+```
+
+</details>
+
+<!-- cr-indicator-types:potential_issue -->
+
+<!-- cr-comment:v1:4300d6eb4cecf5e3a01df7ec -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+✅ Addressed in commit 3977d78
+_📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_
+
+**Add negative test cases for no-stop and non-matching-error paths.**
+
+The tests cover happy paths and stop-rejection recovery well. Consider adding tests verifying the fallback does NOT retry when `stop_kwargs` is empty or the error doesn't match the stop-rejection pattern — these guard against false-positive retries.
+
+
+
+
+<details>
+<summary>Suggested additional tests</summary>
+
+```python
+class MockAlwaysFailInvokeLLM:
+    """Mock that always raises, regardless of stop kwargs."""
+    def __init__(self, error_msg="unrelated error"):
+        self.invoked_kwargs = []
+        self.error_msg = error_msg
+
+    def invoke(self, prompt, **kwargs):
+        self.invoked_kwargs.append(kwargs)
+        raise ValueError(self.error_msg)
+
+
+def test_invoke_no_stop_does_not_retry():
+    """Without stop kwargs, errors propagate without retry."""
+    llm = MockAlwaysFailInvokeLLM()
+    with pytest.raises(ValueError):
+        _invoke_with_stop_fallback(llm, "Hello", {})
+    assert len(llm.invoked_kwargs) == 1
+
+
+def test_invoke_non_matching_error_does_not_retry():
+    """Non-stop-related errors propagate without retry."""
+    llm = MockAlwaysFailInvokeLLM("authentication failed")
+    with pytest.raises(ValueError, match="authentication failed"):
+        _invoke_with_stop_fallback(llm, "Hello", {'stop': ['x']})
+    assert len(llm.invoked_kwargs) == 1
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/tests/ai/common/test_chat_fallback.py` around lines 36 - 80, Add
+negative tests covering _invoke_with_stop_fallback when stop_kwargs is empty and
+when the raised error does not match the stop-rejection pattern; assert the
+ValueError propagates and the mock records exactly one invocation, using an
+always-failing mock such as MockAlwaysFailInvokeLLM.
+```
+
+</details>
+
+<!-- cr-indicator-types:nitpick -->
+
+<!-- cr-comment:v1:046f20e30eef4d210d9af01b -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+
+✅ Addressed in commit 3977d78
+_🎯 Functional Correctness_ | _🟡 Minor_ | _⚡ Quick win_
+
+<details>
+<summary>🧩 Analysis chain</summary>
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+printf '\n== File outline ==\n'
+ast-grep outline packages/ai/src/ai/common/chat.py --view expanded || true
+
+printf '\n== Relevant file excerpt ==\n'
+sed -n '1,180p' packages/ai/src/ai/common/chat.py
+
+printf '\n== Search for helper usage ==\n'
+rg -n "_stream_with_stop_fallback|on_chunk_w|chat_string|llm.stream\(" packages/ai/src -g '*.py' -g '*.ts' -g '*.tsx' || true
+
+printf '\n== Rocket Ride Python API doc (if present) ==\n'
+fd -a 'ROCKETRIDE_python_API.md' . || true
+```
+
+Repository: rocketride-org/rocketride-server
+
+Length of output: 10901
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+# Probe whether a stream can legally yield some chunks and then raise on a later next()
+# using a small read-only Python simulation of the helper's control flow.
+
+python3 - <<'PY'
+def helper(llm):
+    prompt = "p"
+    stop_kwargs = {"stop": ["x"]}
+    it = llm.stream(prompt, **stop_kwargs)
+    try:
+        first = next(it)
+        print("yield", first)
+        yield first
+        print("enter yield from")
+        yield from it
+    except StopIteration:
+        print("stopiteration")
+        return
+    except Exception as e:
+        print("caught", type(e).__name__, e)
+        err_str = str(e).lower()
+        if stop_kwargs and 'stop' in err_str and ('unsupported' in err_str or 'invalid' in err_str):
+            print("retry no stop")
+            yield from llm.stream(prompt)
+        else:
+            raise
+
+class LLM1:
+    def stream(self, prompt, **kwargs):
+        def gen():
+            yield "a"
+            yield "b"
+            raise ValueError("invalid stop after some chunks")
+        return gen()
+
+class LLM2:
+    def stream(self, prompt, **kwargs):
+        def gen():
+            raise ValueError("invalid stop before any chunks")
+            yield "x"
+        return gen()
+
+for cls in (LLM1, LLM2):
+    print("==", cls.__name__, "==")
+    try:
+        print(list(helper(cls())))
+    except Exception as e:
+        print("outer exception:", type(e).__name__, e)
+PY
+```
+
+Repository: rocketride-org/rocketride-server
+
+Length of output: 461
+
+---
+
+🏁 Script executed:
+
+```shell
+#!/bin/bash
+set -euo pipefail
+
+# Inspect the exact file sections around the helper and its caller.
+cat -n packages/ai/src/ai/common/chat.py | sed -n '1,220p'
+```
+
+Repository: rocketride-org/rocketride-server
+
+Length of output: 11180
+
+---
+
+
+
+</details>
+
+**Move the stop fallback before any output is yielded.** `yield from it` is inside the `try`, so a stop-related error raised after some chunks have already been emitted will retry with `llm.stream(prompt)` and replay those chunks. Keep the fallback limited to stream creation and `next(it)` so retries only happen before the first emission.
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/src/ai/common/chat.py` around lines 53 - 68, The
+_stream_with_stop_fallback function must only apply the stop-parameter retry
+before emitting any output. Restrict the try/except to stream creation and the
+initial next(it) call, yield the first chunk afterward, and iterate over the
+existing stream outside the exception handler; retry without stop only when
+creation or the first read raises a matching unsupported/invalid-stop error.
+```
+
+</details>
+
+<!-- fingerprinting:phantom:medusa:capybara -->
+
+<!-- cr-indicator-types:potential_issue -->
+
+<!-- cr-comment:v1:2796ff3a99877d0756583df8 -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+_📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_
+
+**Add streaming negative tests for parity with the invoke path.**
+
+The invoke fallback has negative tests for empty `stop_kwargs` (line 82) and unrelated errors (line 95), but the streaming fallback has no equivalent tests. Adding them ensures the same guard logic in `_stream_with_stop_fallback` is verified.
+
+
+
+
+<details>
+<summary>Suggested additional tests</summary>
+
+```python
+def test_stream_with_stop_fallback_empty_stop_kwargs():
+    """Verify that a stream error does not trigger a retry if stop_kwargs is empty."""
+    llm = MockStreamLLM()
+    def failing_stream(prompt, **kwargs):
+        llm.streamed_kwargs.append(kwargs)
+        def gen():
+            raise ValueError("unsupported_parameter: 'stop'")
+            yield "never"
+        return gen()
+    llm.stream = failing_stream
+
+    with pytest.raises(ValueError, match="unsupported_parameter: 'stop'"):
+        list(_stream_with_stop_fallback(llm, "Hello", {}))
+
+    assert len(llm.streamed_kwargs) == 1  # No retry occurred
+
+
+def test_stream_with_stop_fallback_unrelated_error():
+    """Verify that an unrelated stream error does not trigger a retry even with stop_kwargs."""
+    llm = MockStreamLLM()
+    def failing_stream(prompt, **kwargs):
+        llm.streamed_kwargs.append(kwargs)
+        def gen():
+            raise ValueError("Rate limit exceeded")
+            yield "never"
+        return gen()
+    llm.stream = failing_stream
+
+    stop_kwargs = {'stop': ['\nObservation:']}
+    with pytest.raises(ValueError, match="Rate limit exceeded"):
+        list(_stream_with_stop_fallback(llm, "Hello", stop_kwargs))
+
+    assert len(llm.streamed_kwargs) == 1  # No retry occurred
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/tests/ai/common/test_chat_fallback.py` around lines 82 - 107, Add
+streaming fallback negative tests alongside
+test_invoke_with_stop_fallback_empty_stop_kwargs and
+test_invoke_with_stop_fallback_unrelated_error. Use MockStreamLLM and a failing
+stream generator to verify _stream_with_stop_fallback re-raises
+unsupported-parameter errors with empty stop_kwargs and unrelated errors with
+stop_kwargs, while asserting only one stream invocation occurs in each case.
+```
+
+</details>
+
+<!-- cr-indicator-types:nitpick -->
+
+<!-- cr-comment:v1:2b9153131619150ef4dd5f1d -->
+
+<!-- This is an auto-generated comment by CodeRabbit -->
+🟡 risk: the `except` wraps the whole body including `yield from it`, so an error that matches the string filter *after* chunks were already yielded restarts the stream from scratch and duplicates everything already sent to the UI. The `first = next(it)` special-casing suggests the intent was to guard only stream creation + first chunk — restructure so only that part is inside the `try`:
+```python
+try:
+    it = llm.stream(prompt, **stop_kwargs)
+    first = next(it)
+except StopIteration:
+    return
+except Exception as e:
+    err_str = str(e).lower()
+    if stop_kwargs and 'stop' in err_str and ('unsupported' in err_str or 'invalid' in err_str):
+        warning(f'LLM rejected stop parameter: {e}. Retrying stream without stop.')
+        yield from llm.stream(prompt)
+        return
+    raise
+yield first
+yield from it
+```
+Same principle as the existing guard at `_chat_string_responses` ("Only retry non-streaming if nothing has reached the UI").
+🟡 risk: matching any `Exception` whose text contains `stop` + (`unsupported`|`invalid`) is broad — e.g. a legitimately malformed stop-sequence config error (`invalid_request_error ... stop_sequences`) gets silently swallowed and retried without stop instead of surfacing. The OpenAI error is structured; prefer checking `getattr(e, 'status_code', None) == 400` and/or `code == 'unsupported_parameter'` / `param == 'stop'` from `e.body`/`e.code` when present, keeping the string match only as a last-resort fallback for providers without structured errors. Consider extracting the predicate into one `_is_stop_rejection(e)` helper — it's duplicated verbatim in both functions.

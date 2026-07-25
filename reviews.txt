@@ -1,0 +1,477 @@
+**Actionable comments posted: 1**
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+Inline comments:
+In `@nodes/test/agent_crewai/test_stop_words.py`:
+- Around line 399-401: In test_both_empty_yields_empty, replace the permissive
+assertion with an exact result == [] check. Align the test name and coverage by
+either renaming it to reflect a None and empty-list input or adding a separate
+assertion/test for _resolve_stop([], []).
+```
+
+</details>
+
+<details>
+<summary>🪄 Autofix (Beta)</summary>
+
+Fix all unresolved CodeRabbit comments on this PR:
+
+- [ ] <!-- {"checkboxId": "4b0d0e0a-96d7-4f10-b296-3a18ea78f0b9"} --> Push a commit to this branch (recommended)
+- [ ] <!-- {"checkboxId": "ff5b1114-7d8c-49e6-8ac1-43f82af23a33"} --> Create a new PR with the fixes
+
+</details>
+
+---
+
+<details>
+<summary>ℹ️ Review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: Path: .coderabbit.yaml
+
+**Review profile**: ASSERTIVE
+
+**Plan**: Pro
+
+**Run ID**: `e53ad5c8-1f31-4a0d-be26-19924e6ead6b`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 37cd05571076192745eaab45f52edaf18cb87ba4 and 62d67dabb8512164a5bda2354af6e9f9e53acb76.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (2)</summary>
+
+* `nodes/src/nodes/agent_crewai/crewai_base.py`
+* `nodes/test/agent_crewai/test_stop_words.py`
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+**Actionable comments posted: 2**
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+Inline comments:
+In `@packages/ai/src/ai/common/chat.py`:
+- Around line 53-68: Move the llm.stream(prompt, **stop_kwargs) call inside the
+try block of _stream_with_stop_fallback, keeping iterator consumption and
+fallback handling within the same exception scope so synchronous stream creation
+errors trigger the existing stop-parameter retry logic.
+
+In `@packages/ai/tests/ai/common/test_chat_fallback.py`:
+- Around line 36-80: Add negative tests covering _invoke_with_stop_fallback when
+stop_kwargs is empty and when the raised error does not match the stop-rejection
+pattern; assert the ValueError propagates and the mock records exactly one
+invocation, using an always-failing mock such as MockAlwaysFailInvokeLLM.
+```
+
+</details>
+
+<details>
+<summary>🪄 Autofix (Beta)</summary>
+
+Fix all unresolved CodeRabbit comments on this PR:
+
+- [ ] <!-- {"checkboxId": "4b0d0e0a-96d7-4f10-b296-3a18ea78f0b9"} --> Push a commit to this branch (recommended)
+- [ ] <!-- {"checkboxId": "ff5b1114-7d8c-49e6-8ac1-43f82af23a33"} --> Create a new PR with the fixes
+
+</details>
+
+---
+
+<details>
+<summary>ℹ️ Review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: Path: .coderabbit.yaml
+
+**Review profile**: ASSERTIVE
+
+**Plan**: Pro
+
+**Run ID**: `c265bf4b-3a52-4d31-ac4d-4646fbd069aa`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 62d67dabb8512164a5bda2354af6e9f9e53acb76 and bb58b010283ea76fa32cfc52f73dfd1923a83e99.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (2)</summary>
+
+* `packages/ai/src/ai/common/chat.py`
+* `packages/ai/tests/ai/common/test_chat_fallback.py`
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+
+
+<details>
+<summary>♻️ Duplicate comments (1)</summary><blockquote>
+
+<details>
+<summary>packages/ai/tests/ai/common/test_chat_fallback.py (1)</summary><blockquote>
+
+`36-80`: _📐 Maintainability & Code Quality_ | _🔵 Trivial_ | _⚡ Quick win_
+
+**Negative test cases for no-stop and non-matching-error paths still missing.**
+
+The current tests cover happy paths and stop-rejection recovery well, but there are no tests verifying the fallback does NOT retry when `stop_kwargs` is empty or when the error doesn't match the stop-rejection pattern. These guard against false-positive retries. This was previously flagged and remains unaddressed.
+
+<details>
+<summary>Suggested additional tests</summary>
+
+```python
+class MockAlwaysFailInvokeLLM:
+    """Mock that always raises, regardless of stop kwargs."""
+    def __init__(self, error_msg="unrelated error"):
+        self.invoked_kwargs = []
+        self.error_msg = error_msg
+
+    def invoke(self, prompt, **kwargs):
+        self.invoked_kwargs.append(kwargs)
+        raise ValueError(self.error_msg)
+
+
+def test_invoke_no_stop_does_not_retry():
+    """Without stop kwargs, errors propagate without retry."""
+    llm = MockAlwaysFailInvokeLLM()
+    with pytest.raises(ValueError):
+        _invoke_with_stop_fallback(llm, "Hello", {})
+    assert len(llm.invoked_kwargs) == 1
+
+
+def test_invoke_non_matching_error_does_not_retry():
+    """Non-stop-related errors propagate without retry."""
+    llm = MockAlwaysFailInvokeLLM("authentication failed")
+    with pytest.raises(ValueError, match="authentication failed"):
+        _invoke_with_stop_fallback(llm, "Hello", {'stop': ['x']})
+    assert len(llm.invoked_kwargs) == 1
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/tests/ai/common/test_chat_fallback.py` around lines 36 - 80, Add
+negative coverage for _invoke_with_stop_fallback: introduce an always-failing
+mock, then verify empty stop_kwargs propagates the error after one invocation
+and an unrelated error with stop kwargs also propagates without retry. Assert
+the expected ValueError messages and invocation count.
+```
+
+</details>
+
+<!-- cr-comment:v1:8b38ee5199234793e4dd2041 -->
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+Duplicate comments:
+In `@packages/ai/tests/ai/common/test_chat_fallback.py`:
+- Around line 36-80: Add negative coverage for _invoke_with_stop_fallback:
+introduce an always-failing mock, then verify empty stop_kwargs propagates the
+error after one invocation and an unrelated error with stop kwargs also
+propagates without retry. Assert the expected ValueError messages and invocation
+count.
+```
+
+</details>
+
+---
+
+<details>
+<summary>ℹ️ Review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: Path: .coderabbit.yaml
+
+**Review profile**: ASSERTIVE
+
+**Plan**: Pro
+
+**Run ID**: `a6954250-209b-4f97-a46c-1649e3c57fd1`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between bb58b010283ea76fa32cfc52f73dfd1923a83e99 and 83566e5cd6717bba425798f4d1d7c70b2daac936.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (1)</summary>
+
+* `packages/ai/tests/ai/common/test_chat_fallback.py`
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+**Actionable comments posted: 1**
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+Inline comments:
+In `@packages/ai/src/ai/common/chat.py`:
+- Around line 53-68: The _stream_with_stop_fallback function must only apply the
+stop-parameter retry before emitting any output. Restrict the try/except to
+stream creation and the initial next(it) call, yield the first chunk afterward,
+and iterate over the existing stream outside the exception handler; retry
+without stop only when creation or the first read raises a matching
+unsupported/invalid-stop error.
+```
+
+</details>
+
+<details>
+<summary>🪄 Autofix (Beta)</summary>
+
+Fix all unresolved CodeRabbit comments on this PR:
+
+- [ ] <!-- {"checkboxId": "4b0d0e0a-96d7-4f10-b296-3a18ea78f0b9"} --> Push a commit to this branch (recommended)
+- [ ] <!-- {"checkboxId": "ff5b1114-7d8c-49e6-8ac1-43f82af23a33"} --> Create a new PR with the fixes
+
+</details>
+
+---
+
+<details>
+<summary>ℹ️ Review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: Path: .coderabbit.yaml
+
+**Review profile**: ASSERTIVE
+
+**Plan**: Pro
+
+**Run ID**: `effb62f1-3ea3-4d5a-812d-418b9b7e956f`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 83566e5cd6717bba425798f4d1d7c70b2daac936 and 358c9d1488b3e5c6ae8bf3dc6d552dafd4ef6529.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (2)</summary>
+
+* `packages/ai/src/ai/common/chat.py`
+* `packages/ai/tests/ai/common/test_chat_fallback.py`
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+**Actionable comments posted: 1**
+
+<details>
+<summary>♻️ Duplicate comments (1)</summary><blockquote>
+
+<details>
+<summary>packages/ai/src/ai/common/chat.py (1)</summary><blockquote>
+
+`53-68`: _🩺 Stability & Availability_ | _🟠 Major_ | _⚡ Quick win_
+
+**Restrict retry to before first emission to prevent duplicate chunks.**
+
+`yield first` and `yield from it` remain inside the `try` block. If the stream raises a stop-related error after the first chunk has already been emitted to the caller, the `except` handler will retry with `yield from llm.stream(prompt)`, replaying all chunks from the beginning and producing duplicates. Move the yields outside the `try` so the fallback only applies to stream creation and the initial `next(it)`.
+
+
+
+
+
+
+<details>
+<summary>Proposed fix</summary>
+
+```diff
+ def _stream_with_stop_fallback(llm, prompt, stop_kwargs):
+     """Stream from the LLM, but fallback to no stop kwargs if the API rejects them."""
+     try:
+         it = llm.stream(prompt, **stop_kwargs)
+         first = next(it)
+-        yield first
+-        yield from it
+     except StopIteration:
+         return
+     except Exception as e:
+         err_str = str(e).lower()
+         if stop_kwargs and 'stop' in err_str and ('unsupported' in err_str or 'invalid' in err_str):
+             warning(f"LLM rejected 'stop' parameter: {e}. Retrying stream without stop.")
+             yield from llm.stream(prompt)
++            return
+         else:
+             raise
++    yield first
++    yield from it
+```
+</details>
+
+<details>
+<summary>🤖 Prompt for AI Agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+In `@packages/ai/src/ai/common/chat.py` around lines 53 - 68, Update
+_stream_with_stop_fallback so the try block only creates the stream and
+retrieves its first item; move yield first and yield from it outside the
+try/except. This ensures stop-related errors after the first emission propagate
+instead of triggering a fallback that duplicates already-emitted chunks.
+```
+
+</details>
+
+<!-- cr-comment:v1:9ef976307ff745d6374e646a -->
+
+</blockquote></details>
+
+</blockquote></details>
+
+<details>
+<summary>🤖 Prompt for all review comments with AI agents</summary>
+
+```
+Verify each finding against current code. Fix only still-valid issues, skip the
+rest with a brief reason, keep changes minimal, and validate.
+
+Inline comments:
+In `@packages/ai/tests/ai/common/test_chat_fallback.py`:
+- Around line 82-107: Add streaming fallback negative tests alongside
+test_invoke_with_stop_fallback_empty_stop_kwargs and
+test_invoke_with_stop_fallback_unrelated_error. Use MockStreamLLM and a failing
+stream generator to verify _stream_with_stop_fallback re-raises
+unsupported-parameter errors with empty stop_kwargs and unrelated errors with
+stop_kwargs, while asserting only one stream invocation occurs in each case.
+
+---
+
+Duplicate comments:
+In `@packages/ai/src/ai/common/chat.py`:
+- Around line 53-68: Update _stream_with_stop_fallback so the try block only
+creates the stream and retrieves its first item; move yield first and yield from
+it outside the try/except. This ensures stop-related errors after the first
+emission propagate instead of triggering a fallback that duplicates
+already-emitted chunks.
+```
+
+</details>
+
+<details>
+<summary>🪄 Autofix (Beta)</summary>
+
+Fix all unresolved CodeRabbit comments on this PR:
+
+- [ ] <!-- {"checkboxId": "4b0d0e0a-96d7-4f10-b296-3a18ea78f0b9"} --> Push a commit to this branch (recommended)
+- [ ] <!-- {"checkboxId": "ff5b1114-7d8c-49e6-8ac1-43f82af23a33"} --> Create a new PR with the fixes
+
+</details>
+
+---
+
+<details>
+<summary>ℹ️ Review info</summary>
+
+<details>
+<summary>⚙️ Run configuration</summary>
+
+**Configuration used**: Path: .coderabbit.yaml
+
+**Review profile**: ASSERTIVE
+
+**Plan**: Pro
+
+**Run ID**: `402ccff6-c0f2-4506-a0f0-6c78286b933b`
+
+</details>
+
+<details>
+<summary>📥 Commits</summary>
+
+Reviewing files that changed from the base of the PR and between 358c9d1488b3e5c6ae8bf3dc6d552dafd4ef6529 and 3977d781cfcc011ad0b92b3c8bf9d7e2fb942542.
+
+</details>
+
+<details>
+<summary>📒 Files selected for processing (2)</summary>
+
+* `packages/ai/src/ai/common/chat.py`
+* `packages/ai/tests/ai/common/test_chat_fallback.py`
+
+</details>
+
+</details>
+
+<!-- This is an auto-generated comment by CodeRabbit for review status -->
+The approach is right — this is exactly option 1 from #1538 (catch the 400, retry once without `stop`, rely on the post-hoc `truncate_at_stop_words` backstop, which I verified still applies on the agent path at `ai/common/agent/agent.py:317`). Test coverage of the invoke path is good, including the two negative cases. But three things need fixing before merge:
+
+**Blocking:**
+1. **Title/description don't match the diff.** The title says `fix(agent_crewai): accept stop param from kwargs` and the body describes a kwargs fallback in `HostInvokeLLM` plus `TestKwargsStopFallback` tests — none of that is in this PR (the single commit touches only `ai/common/chat.py` + `test_chat_fallback.py`). Note `HostInvokeLLM` on develop already reads `self.stop_sequences` (`nodes/src/nodes/agent_crewai/crewai_base.py:266`), so if the kwargs commit was dropped intentionally, retitle to `fix(ai): retry without stop param on 400 unsupported_parameter` and rewrite the summary; if it wasn't intentional, the commit is missing.
+2. **Ruff fails: 18× Q000** (double quotes; repo enforces single quotes) — I ran ruff against the PR files to confirm. `python -m ruff check --fix` clears all of them.
+3. **Mid-stream fallback can duplicate output** — see inline comment on `_stream_with_stop_fallback`.
+
+**Non-blocking suggestions:**
+- Consider caching a "this backend rejects stop" flag after the first fallback (e.g. on the wrapper) — as written, every agent step against a gpt-5.x/o-series model pays a failed round-trip first, and CrewAI's internal retries multiply that.
+- Worth a code comment noting that on the retry path a hallucinated `\nObservation:` can stream to the UI before the agent-level truncation trims it — inherent to the retry-without-stop approach, but future readers should know it's a known trade-off.
+- A test for an error raised *after* the first streamed chunk would lock in the no-duplicate behavior once the inline issue is fixed.

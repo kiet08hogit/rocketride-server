@@ -1,4 +1,28 @@
+# =============================================================================
+# MIT License
+# Copyright (c) 2026 Aparavi Software AG
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# =============================================================================
+
 from rocketlib import IGlobalBase, debug, warning
+from ai.common.config import Config
 import json
 
 class IGlobal(IGlobalBase):
@@ -6,33 +30,12 @@ class IGlobal(IGlobalBase):
         super().__init__()
         self.regulator_type = 'sec'
 
-    def initialize(self):
+    def beginGlobal(self):
         """Initialize the global authoritative overlay configuration."""
-        # Read the profile from the JSON configuration
-        profile = self.getProperty('authoritative_overlay.profile')
-        if not profile:
-            warning("No profile specified for authoritative overlay. Defaulting to basic.")
-            profile = "basic"
-
-        config_prop = f"authoritative_overlay.{profile}"
-        config = self.getProperty(config_prop)
-
-        if config:
-            if isinstance(config, str):
-                try:
-                    config = json.loads(config)
-                except Exception as e:
-                    warning(f"Failed to parse overlay config JSON: {e}")
-                    config = {}
-
-            self.regulator_type = config.get('regulator_type', 'sec')
-        else:
-            warning(f'Could not find configuration for profile {profile}. Using defaults.')
-            self.regulator_type = 'sec'
-
+        raw = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig) or {}
+        self.regulator_type = str(raw.get('regulator_type', 'sec')).strip()
         debug(f'Initialized Authoritative Overlay with regulator: {self.regulator_type}')
-        return True
 
-    def terminate(self):
+    def endGlobal(self):
         """Clean up resources on shutdown."""
         pass

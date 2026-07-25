@@ -77,6 +77,24 @@
 				"regulator_type"
 			]
 		},
+		"authoritative_overlay.ifrs": {
+			"object": "ifrs",
+			"properties": [
+				"regulator_type"
+			]
+		},
+		"authoritative_overlay.companies_house": {
+			"object": "companies_house",
+			"properties": [
+				"regulator_type"
+			]
+		},
+		"authoritative_overlay.edinet": {
+			"object": "edinet",
+			"properties": [
+				"regulator_type"
+			]
+		},
 		"authoritative_overlay.profile": {
 			"title": "Profile",
 			"description": "Overlay profile",
@@ -95,19 +113,19 @@
 				{
 					"value": "ifrs",
 					"properties": [
-						"authoritative_overlay.basic"
+						"authoritative_overlay.ifrs"
 					]
 				},
 				{
 					"value": "companies_house",
 					"properties": [
-						"authoritative_overlay.basic"
+						"authoritative_overlay.companies_house"
 					]
 				},
 				{
 					"value": "edinet",
 					"properties": [
-						"authoritative_overlay.basic"
+						"authoritative_overlay.edinet"
 					]
 				}
 			]
@@ -122,36 +140,61 @@
 			]
 		}
 	],
-	"test": {
-		"profiles": [
-			"basic"
-		],
-		"cases": [
-			{
-				"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
-				"expect": {
-					"answers": {
-						"notEmpty": true
+	"test": [
+		{
+			"profiles": [
+				"basic"
+			],
+			"cases": [
+				{
+					"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
+					"expect": {
+						"answers": {
+							"notEmpty": true
+						}
+					}
+				},
+				{
+					"text": "{\"concept\": \"NetIncomeLoss\", \"value\": \"(3.2)m\"}",
+					"expect": {
+						"answers": {
+							"notEmpty": true
+						}
+					}
+				},
+				{
+					"text": "{\"concept\": \"Revenues\", \"value\": \"$999,000\"}",
+					"expect": {
+						"answers": {
+							"notEmpty": false
+						}
 					}
 				}
-			},
-			{
-				"text": "{\"concept\": \"NetIncomeLoss\", \"value\": \"(3.2)m\"}",
-				"expect": {
-					"answers": {
-						"notEmpty": true
+			]
+		},
+		{
+			"profiles": [
+				"ifrs"
+			],
+			"cases": [
+				{
+					"text": "{\"concept\": \"Revenues\", \"value\": \"$25,000,000\"}",
+					"expect": {
+						"answers": {
+							"notEmpty": true
+						}
+					}
+				},
+				{
+					"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
+					"expect": {
+						"answers": {
+							"notEmpty": false
+						}
 					}
 				}
-			},
-			{
-				"text": "{\"concept\": \"Revenues\", \"value\": \"$999,000\"}",
-				"expect": {
-					"answers": {
-						"notEmpty": false
-					}
-				}
-			}
-		]
-	}
+			]
+		}
+	]
 }
 

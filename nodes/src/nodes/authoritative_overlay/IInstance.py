@@ -1,3 +1,26 @@
+# =============================================================================
+# MIT License
+# Copyright (c) 2026 Aparavi Software AG
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in
+# all copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+# =============================================================================
+
 from rocketlib import IInstanceBase, Entry, warning, debug
 from ai.common.schema import Answer
 from .IGlobal import IGlobal
@@ -10,6 +33,16 @@ from .connectors.edinet import query_edinet
 
 import re
 import json
+import math
+
+# Normalizes standard SEC / US-GAAP concepts into standard keys used by other regulator snapshots.
+CONCEPT_MAP = {
+    'Revenues': 'revenue',
+    'NetIncomeLoss': 'net_income',
+    'Assets': 'total_assets',
+    'Liabilities': 'total_liabilities',
+    'StockholdersEquity': 'total_equity'
+}
 
 def _normalize_number(value_str: str) -> float | None:
     """Strip currency symbols, commas, and spaces, then parse to float.
@@ -68,6 +101,7 @@ class IInstance(IInstanceBase):
         The test framework sends data on the ``text`` lane as a plain
         string.  This handler parses the JSON payload, constructs a
         proper ``Answer`` object, and delegates to ``writeAnswers``.
+        This serves as the main entry point for the text lane.
         """
         text = text.strip()
         if not text:
@@ -126,6 +160,11 @@ class IInstance(IInstanceBase):
             self.preventDefault()
             return
 
+        # Map concept to standard terms for non-SEC regulators if possible
+        mapped_concept = concept
+        if regulator_type != 'sec' and concept in CONCEPT_MAP:
+            mapped_concept = CONCEPT_MAP[concept]
+
         # Query the appropriate regulator for the official number based on the snapshot.
         official_data = None
         
@@ -133,11 +172,11 @@ class IInstance(IInstanceBase):
             if regulator_type == 'sec':
                 official_data = query_sec(concept, text)
             elif regulator_type == 'ifrs':
-                official_data = query_ifrs(concept, text)
+                official_data = query_ifrs(mapped_concept, text)
             elif regulator_type == 'companies_house':
-                official_data = query_companies_house(concept, text)
+                official_data = query_companies_house(mapped_concept, text)
             elif regulator_type == 'edinet':
-                official_data = query_edinet(concept, text)
+                official_data = query_edinet(mapped_concept, text)
             else:
                 warning(f"Unknown regulator type: {regulator_type}")
                 # Fail closed: abstain rather than forward an unverified answer
@@ -154,7 +193,7 @@ class IInstance(IInstanceBase):
             return
 
         # official_data is now expected to be a list of floats
-        if normalized_text not in official_data:
+        if not any(math.isclose(normalized_text, v, rel_tol=1e-9, abs_tol=1e-6) for v in official_data):
             warning(f"Abstaining: Value mismatch. Extracted '{text}' (normalized: {normalized_text}) does not match official data from {regulator_type}.")
             self.preventDefault()
             return

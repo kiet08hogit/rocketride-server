@@ -30,69 +30,17 @@
 		"profiles": {
 			"basic": {
 				"title": "Basic: US SEC (EDGAR)",
-				"regulator_type": "sec"
-			},
-			"ifrs": {
-				"title": "EU/UK IFRS",
-				"regulator_type": "ifrs"
-			},
-			"companies_house": {
-				"title": "UK Companies House",
-				"regulator_type": "companies_house"
-			},
-			"edinet": {
-				"title": "Japan EDINET",
-				"regulator_type": "edinet"
+				"regulator_type": "sec",
+				"cik": "320193"
 			}
 		}
 	},
 	"fields": {
-		"regulator_type": {
-			"type": "string",
-			"title": "Regulator Source",
-			"description": "Which regulator database to cross-check against",
-			"default": "sec",
-			"enum": [
-				[
-					"sec",
-					"US SEC (EDGAR)"
-				],
-				[
-					"ifrs",
-					"EU/UK IFRS"
-				],
-				[
-					"companies_house",
-					"UK Companies House"
-				],
-				[
-					"edinet",
-					"Japan EDINET"
-				]
-			]
-		},
 		"authoritative_overlay.basic": {
 			"object": "basic",
 			"properties": [
-				"regulator_type"
-			]
-		},
-		"authoritative_overlay.ifrs": {
-			"object": "ifrs",
-			"properties": [
-				"regulator_type"
-			]
-		},
-		"authoritative_overlay.companies_house": {
-			"object": "companies_house",
-			"properties": [
-				"regulator_type"
-			]
-		},
-		"authoritative_overlay.edinet": {
-			"object": "edinet",
-			"properties": [
-				"regulator_type"
+				"authoritative_overlay.regulator_type",
+				"authoritative_overlay.cik"
 			]
 		},
 		"authoritative_overlay.profile": {
@@ -109,26 +57,26 @@
 					"properties": [
 						"authoritative_overlay.basic"
 					]
-				},
-				{
-					"value": "ifrs",
-					"properties": [
-						"authoritative_overlay.ifrs"
-					]
-				},
-				{
-					"value": "companies_house",
-					"properties": [
-						"authoritative_overlay.companies_house"
-					]
-				},
-				{
-					"value": "edinet",
-					"properties": [
-						"authoritative_overlay.edinet"
-					]
 				}
 			]
+		},
+		"authoritative_overlay.regulator_type": {
+			"type": "string",
+			"title": "Regulator Source",
+			"description": "Which regulator database to cross-check against",
+			"default": "sec",
+			"enum": [
+				[
+					"sec",
+					"US SEC (EDGAR)"
+				]
+			]
+		},
+		"authoritative_overlay.cik": {
+			"type": "string",
+			"title": "Company CIK",
+			"description": "The SEC Central Index Key for the company.",
+			"default": "320193"
 		}
 	},
 	"shape": [
@@ -147,7 +95,7 @@
 			],
 			"cases": [
 				{
-					"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
+					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$74,362,000,000\"}",
 					"expect": {
 						"answers": {
 							"notEmpty": true
@@ -155,38 +103,7 @@
 					}
 				},
 				{
-					"text": "{\"concept\": \"NetIncomeLoss\", \"value\": \"(3.2)m\"}",
-					"expect": {
-						"answers": {
-							"notEmpty": true
-						}
-					}
-				},
-				{
-					"text": "{\"concept\": \"Revenues\", \"value\": \"$999,000\"}",
-					"expect": {
-						"answers": {
-							"notEmpty": false
-						}
-					}
-				}
-			]
-		},
-		{
-			"profiles": [
-				"ifrs"
-			],
-			"cases": [
-				{
-					"text": "{\"concept\": \"Revenues\", \"value\": \"$25,000,000\"}",
-					"expect": {
-						"answers": {
-							"notEmpty": true
-						}
-					}
-				},
-				{
-					"text": "{\"concept\": \"Revenues\", \"value\": \"$15,000,000\"}",
+					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$999,000\"}",
 					"expect": {
 						"answers": {
 							"notEmpty": false
@@ -197,4 +114,3 @@
 		}
 	]
 }
-

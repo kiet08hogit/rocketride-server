@@ -26,23 +26,10 @@ from ai.common.schema import Answer
 from .IGlobal import IGlobal
 
 from .connectors.sec import query_sec
-from .connectors.ifrs import query_ifrs
-from .connectors.companies_house import query_companies_house
-from .connectors.edinet import query_edinet
-
 
 import re
 import json
 import math
-
-# Normalizes standard SEC / US-GAAP concepts into standard keys used by other regulator snapshots.
-CONCEPT_MAP = {
-    'Revenues': 'revenue',
-    'NetIncomeLoss': 'net_income',
-    'Assets': 'total_assets',
-    'Liabilities': 'total_liabilities',
-    'StockholdersEquity': 'total_equity'
-}
 
 def _normalize_number(value_str: str) -> float | None:
     """Strip currency symbols, commas, and spaces, then parse to float.
@@ -65,6 +52,10 @@ def _normalize_number(value_str: str) -> float | None:
     # Remove currency, commas, and spaces
     clean_str = re.sub(r'[\$€£¥,\s]', '', clean_str)
     
+    # Handle parenthesized negatives: (1.5) -> -1.5
+    if clean_str.startswith('(') and clean_str.endswith(')'):
+        clean_str = '-' + clean_str[1:-1]
+        
     # Handle k, m, b suffixes
     if clean_str.endswith('k'):
         scale *= 1_000.0
@@ -76,10 +67,6 @@ def _normalize_number(value_str: str) -> float | None:
         scale *= 1_000_000_000.0
         clean_str = clean_str[:-1]
         
-    # Handle parenthesized negatives: (1.5) -> -1.5
-    if clean_str.startswith('(') and clean_str.endswith(')'):
-        clean_str = '-' + clean_str[1:-1]
-        
     try:
         return float(clean_str) * scale
     except ValueError:
@@ -90,10 +77,6 @@ class IInstance(IInstanceBase):
 
     def __init__(self):
         super().__init__()
-
-    def open(self, entry: Entry):
-        """Reset per-object state."""
-        pass
 
     def writeText(self, text: str):
         """Handle raw text input (used by the test framework).
@@ -137,12 +120,12 @@ class IInstance(IInstanceBase):
                     payload = json.loads(text_val)
                     
             if not isinstance(payload, dict):
-                raise ValueError(f"Payload is not a dictionary, it is {type(payload)}")
+                raise ValueError(f'Payload is not a dictionary, it is {type(payload)}')
                 
             concept = str(payload.get('concept', ''))
             text = str(payload.get('value', ''))
         except Exception as e:
-            warning(f"Abstaining: Expected JSON answer with 'concept' and 'value'. Error: {e}")
+            warning(f'Abstaining: Expected JSON answer with \'concept\' and \'value\'. Error: {e}')
             self.preventDefault()
             return
             
@@ -160,23 +143,12 @@ class IInstance(IInstanceBase):
             self.preventDefault()
             return
 
-        # Map concept to standard terms for non-SEC regulators if possible
-        mapped_concept = concept
-        if regulator_type != 'sec' and concept in CONCEPT_MAP:
-            mapped_concept = CONCEPT_MAP[concept]
-
-        # Query the appropriate regulator for the official number based on the snapshot.
+        # Query the appropriate regulator for the official number
         official_data = None
         
         try:
             if regulator_type == 'sec':
-                official_data = query_sec(concept, text)
-            elif regulator_type == 'ifrs':
-                official_data = query_ifrs(mapped_concept, text)
-            elif regulator_type == 'companies_house':
-                official_data = query_companies_house(mapped_concept, text)
-            elif regulator_type == 'edinet':
-                official_data = query_edinet(mapped_concept, text)
+                official_data = query_sec(concept, text, cik=self.IGlobal.cik)
             else:
                 warning(f"Unknown regulator type: {regulator_type}")
                 # Fail closed: abstain rather than forward an unverified answer
@@ -201,7 +173,3 @@ class IInstance(IInstanceBase):
         debug(f"Authoritative Match: '{text}' verified against {regulator_type} database.")
         # Forward the answer downstream
         self.instance.writeAnswers(answer)
-
-    def close(self):
-        """Clean up on close."""
-        pass

@@ -34,8 +34,5 @@ class IGlobal(IGlobalBase):
         """Initialize the global authoritative overlay configuration."""
         raw = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig) or {}
         self.regulator_type = str(raw.get('regulator_type', 'sec')).strip()
-        debug(f'Initialized Authoritative Overlay with regulator: {self.regulator_type}')
-
-    def endGlobal(self):
-        """Clean up resources on shutdown."""
-        pass
+        self.cik = str(raw.get('cik', '')).strip().zfill(10)
+        debug(f'Initialized Authoritative Overlay with regulator: {self.regulator_type}, CIK: {self.cik}')

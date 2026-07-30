@@ -1,2 +1,0 @@
-img2table
-polars-lts-cpu

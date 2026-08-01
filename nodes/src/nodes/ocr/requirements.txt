@@ -4,5 +4,5 @@
 # by ai.common.models which uses ai.common.torch for torch installation.
 # This node only needs table structure detection.
 #
-# numpy, pillow, and the table detection library are base engine dependencies - don't reinstall them here
+# numpy and the table detection library are base engine dependencies, and pillow arrives transitively via them - don't reinstall them here
 # as that can corrupt already-loaded modules in the server process.

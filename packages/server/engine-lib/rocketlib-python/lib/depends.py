@@ -693,6 +693,11 @@ def _find_override_files() -> list[str]:
 def _compute_hash(file_paths: list[str]) -> str:
     """Compute a fast hash from file metadata (mtime + size)."""
     hasher = hashlib.md5()
+
+    # Mix the AVX2 verdict into the hash so a copied cache invalidates if the CPU architecture changes
+    avx2_missing = '1' if _is_x86_64_missing_avx2() else '0'
+    hasher.update(f'avx2_missing:{avx2_missing}\n'.encode())
+
     for path in sorted(file_paths):
         stat = os.stat(path)
         entry = f'{path}:{stat.st_size}:{stat.st_mtime_ns}\n'
@@ -871,8 +876,9 @@ def _excludes_content() -> str:
     and, on non-Darwin, plain `onnxruntime` (it clobbers onnxruntime-gpu in the same
     folder; the gpu build provides `import onnxruntime`).
 
-    Also excludes the incorrect polars distribution for the current CPU. polars and
-    polars-lts-cpu both provide ``import polars`` and cannot be installed together.
+    Also conditionally excludes the incorrect polars distribution for the current CPU.
+    polars and polars-lts-cpu both provide ``import polars`` and cannot be installed
+    together; ``--excludes`` keeps uv from resolving both.
     """
     excludes = 'uv\n'
     if platform.system() != 'Darwin':
@@ -882,7 +888,7 @@ def _excludes_content() -> str:
         # Exclude standard polars so uv doesn't install it alongside polars-lts-cpu
         excludes += 'polars\n'
     else:
-        debug('AVX2 instructions detected; using standard polars')
+        debug('AVX2 fallback not required; using standard polars')
         # Exclude the cpu variant so it isn't installed on standard AVX2 hardware
         excludes += 'polars-lts-cpu\n'
     return excludes

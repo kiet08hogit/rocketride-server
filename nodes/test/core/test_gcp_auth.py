@@ -36,6 +36,20 @@ def test_get_gcp_credentials_adc_success():
         mock_default.assert_called_once_with(scopes=_DEFAULT_SCOPES)
 
 
+def test_get_gcp_credentials_adc_explicit_scopes():
+    config = {'authType': 'adc'}
+    scopes = ['https://www.googleapis.com/auth/datastore']
+    with patch('google.auth.default') as mock_default:
+        mock_creds = MagicMock()
+        mock_default.return_value = (mock_creds, 'my-project-id')
+
+        creds, project_id = get_gcp_credentials(config, scopes=scopes)
+
+        assert creds == mock_creds
+        assert project_id == 'my-project-id'
+        mock_default.assert_called_once_with(scopes=scopes)
+
+
 def test_get_gcp_credentials_adc_explicit_project():
     config = {'authType': 'adc', 'projectId': 'explicit-project'}
     with patch('google.auth.default') as mock_default:

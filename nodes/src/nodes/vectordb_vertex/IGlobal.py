@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from ai.common.config import Config
 from rocketlib import IGlobalBase, OPEN_MODE, debug, warning
-from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError
 
 try:
     from google.cloud import aiplatform
 except ImportError:
     aiplatform = None
+
+_VERTEX_SCOPES = ['https://www.googleapis.com/auth/cloud-platform']
+
 
 class IGlobal(IGlobalBase):
     """Global state for Vertex AI Vector Search node."""
@@ -24,6 +26,9 @@ class IGlobal(IGlobalBase):
         if aiplatform is None:
             raise ImportError('google-cloud-aiplatform is not installed.')
 
+        # deferred: engine-path import
+        from nodes.core.gcp_auth import get_gcp_credentials
+
         cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
 
         self.location = str((cfg.get('location') or 'us-central1')).strip()
@@ -31,36 +36,36 @@ class IGlobal(IGlobalBase):
         self.deployed_index_id = str((cfg.get('deployedIndexId') or '')).strip()
 
         if not index_endpoint_id or not self.deployed_index_id:
-            warning('indexEndpointId and deployedIndexId are required for Vertex AI Vector Search.')
+            raise ValueError('indexEndpointId and deployedIndexId are required for Vertex AI Vector Search.')
 
         # Auth
         try:
-            creds, self.project_id = get_gcp_credentials(cfg)
+            creds, self.project_id = get_gcp_credentials(cfg, scopes=_VERTEX_SCOPES)
         except Exception as e:
             warning(f'Vertex AI authentication failed: {e}')
             raise
 
-        aiplatform.init(
-            project=self.project_id,
-            location=self.location,
-            credentials=creds
-        )
-        
-        # Connect to Index Endpoint
+        # Pass project/location/credentials to the endpoint constructor — do not
+        # call aiplatform.init(), which mutates process-global SDK state.
         try:
-            if index_endpoint_id:
-                self.index_endpoint = aiplatform.MatchingEngineIndexEndpoint(
-                    index_endpoint_name=index_endpoint_id
-                )
-                debug(f'vectordb_vertex: connected to index endpoint {index_endpoint_id}')
+            self.index_endpoint = aiplatform.MatchingEngineIndexEndpoint(
+                index_endpoint_name=index_endpoint_id,
+                project=self.project_id,
+                location=self.location,
+                credentials=creds,
+            )
+            debug(f'vectordb_vertex: connected to index endpoint {index_endpoint_id}')
         except Exception as e:
             warning(f'Vertex AI connection check failed: {e}')
             raise
 
     def validateConfig(self) -> None:
+        # deferred: engine-path import
+        from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError
+
         try:
             cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
-            get_gcp_credentials(cfg)
+            get_gcp_credentials(cfg, scopes=_VERTEX_SCOPES)
             if not str(cfg.get('indexEndpointId') or '').strip():
                 warning('indexEndpointId is required')
             if not str(cfg.get('deployedIndexId') or '').strip():

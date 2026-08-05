@@ -7,13 +7,11 @@
 	"node": "python",
 	"path": "nodes.db_firestore",
 	"prefix": "firestore",
-	"description": ["A processing component that connects to Google Cloud Firestore (Datastore Mode or Native)."],
+	"description": ["A processing component that connects to Google Cloud Firestore (Native mode)."],
 	"icon": "db_firestore.svg",
 	"documentation": "https://docs.rocketride.org",
 	"invoke": {},
-	"lanes": {
-		"answers": []
-	},
+	"lanes": {},
 	"preconfig": {
 		"default": "default",
 		"profiles": {
@@ -37,10 +35,10 @@
 		"firestore.default": {
 			"object": "default",
 			"properties": [
-				"gcp.authType", 
-				"gcp.serviceAccountKey", 
-				"gcp.projectId", 
-				"firestore.database", 
+				"gcp.authType",
+				"gcp.serviceAccountKey",
+				"gcp.projectId",
+				"firestore.database",
 				"firestore.collection"
 			]
 		},

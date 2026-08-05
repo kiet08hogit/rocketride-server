@@ -12,5 +12,7 @@ When placed in a pipeline as a tool node, the LLM can:
 - **`list_files`**: List objects in the configured bucket (with optional prefix filtering).
 - **`download_file`**: Download an object from the bucket to a temporary local file on the server.
 
+Downloaded files are written under a temp path returned as `local_path`. The node tracks those paths and **deletes them in `endGlobal`** when the node shuts down. Objects larger than `maxDownloadBytes` (default 50 MiB) are rejected before download.
+
 <!-- ROCKETRIDE:GENERATED:PARAMS START -->
 <!-- ROCKETRIDE:GENERATED:PARAMS END -->

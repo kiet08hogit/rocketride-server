@@ -1,6 +1,6 @@
 # Firestore Node
 
-A standard node for interacting with Google Cloud Firestore (Datastore mode or Native mode).
+A standard node for interacting with Google Cloud Firestore (Native mode).
 
 ## Authentication
 This node uses the shared RocketRide Google Cloud authentication logic. You can authenticate by either:

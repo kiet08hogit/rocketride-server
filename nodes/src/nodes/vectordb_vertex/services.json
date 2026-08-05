@@ -1,7 +1,7 @@
 {
 	"title": "Vertex AI Vector Search",
 	"protocol": "vectordb_vertex://",
-	"classType": ["store", "tool"],
+	"classType": ["tool"],
 	"capabilities": ["noremote", "invoke"],
 	"register": "filter",
 	"node": "python",
@@ -11,9 +11,7 @@
 	"icon": "vertex.svg",
 	"documentation": "https://docs.rocketride.org",
 	"invoke": {},
-	"lanes": {
-		"answers": []
-	},
+	"lanes": {},
 	"preconfig": {
 		"default": "default",
 		"profiles": {
@@ -40,10 +38,10 @@
 		"vertex.default": {
 			"object": "default",
 			"properties": [
-				"gcp.authType", 
-				"gcp.serviceAccountKey", 
-				"gcp.projectId", 
-				"vertex.location", 
+				"gcp.authType",
+				"gcp.serviceAccountKey",
+				"gcp.projectId",
+				"vertex.location",
 				"vertex.indexEndpointId",
 				"vertex.deployedIndexId"
 			]

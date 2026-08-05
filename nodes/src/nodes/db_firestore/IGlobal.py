@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from ai.common.config import Config
 from rocketlib import IGlobalBase, OPEN_MODE, debug, warning
-from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError
 
 try:
     from google.cloud import firestore
 except ImportError:
     firestore = None
+
+_FIRESTORE_SCOPES = ['https://www.googleapis.com/auth/datastore']
+
 
 class IGlobal(IGlobalBase):
     """Global state for Firestore node."""
@@ -23,6 +25,9 @@ class IGlobal(IGlobalBase):
         if firestore is None:
             raise ImportError('google-cloud-firestore is not installed.')
 
+        # deferred: engine-path import
+        from nodes.core.gcp_auth import get_gcp_credentials
+
         cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
 
         self.database = str((cfg.get('database') or '(default)')).strip() or '(default)'
@@ -30,30 +35,30 @@ class IGlobal(IGlobalBase):
 
         # Auth
         try:
-            creds, project_id = get_gcp_credentials(cfg)
+            creds, project_id = get_gcp_credentials(cfg, scopes=_FIRESTORE_SCOPES)
         except Exception as e:
             warning(f'Firestore authentication failed: {e}')
             raise
 
-        self.client = firestore.Client(
-            project=project_id,
-            credentials=creds,
-            database=self.database
-        )
-        
-        # Fail fast connection check
+        self.client = firestore.Client(project=project_id, credentials=creds, database=self.database)
+
+        # Optional connectivity probe. Listing collections needs broader IAM
+        # than document get/set — warn only so narrowly-scoped SAs can still start.
         try:
-            # simple check to verify connectivity/auth
             next(self.client.collections(), None)
             debug(f'db_firestore: connected to project {self.client.project}, database={self.database}')
         except Exception as e:
-            warning(f'Firestore connection check failed: {e}')
-            raise
+            warning(
+                f'Firestore connection probe failed (list collections); continuing — document tools may still work: {e}'
+            )
 
     def validateConfig(self) -> None:
+        # deferred: engine-path import
+        from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError
+
         try:
             cfg = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig)
-            get_gcp_credentials(cfg) # Validates credentials parse successfully
+            get_gcp_credentials(cfg, scopes=_FIRESTORE_SCOPES)
             if not str(cfg.get('collection') or '').strip():
                 warning('collection is recommended')
         except GCPAuthError as e:

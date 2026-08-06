@@ -1,2 +1,2 @@
 requests>=2.34.2
-tenacity>=8.4.0
+tenacity

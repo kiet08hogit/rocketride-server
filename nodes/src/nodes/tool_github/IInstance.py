@@ -219,6 +219,7 @@ class IInstance(IInstanceBase):
         content_b64 = data.get('content', '')
         content = base64.b64decode(content_b64).decode('utf-8', errors='replace')
         return {
+            'found': True,
             'path': data.get('path'),
             'name': data.get('name'),
             'sha': data.get('sha'),

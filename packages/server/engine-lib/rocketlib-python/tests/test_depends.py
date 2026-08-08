@@ -7,6 +7,7 @@ directory" into ``tmp_path`` so nothing touches a real engine cache.
 """
 
 import ctypes
+import importlib.metadata
 import os
 from io import StringIO
 from types import SimpleNamespace
@@ -80,6 +81,16 @@ class TestComputeHash:
         b = _write(tmp_path / 'b.txt', 'two\n')
 
         assert depends._compute_hash([str(a)]) != depends._compute_hash([str(a), str(b)])
+
+    def test_changes_when_avx2_verdict_flips(self, tmp_path, monkeypatch):
+        """Cache key must change when the AVX2 verdict flips (warm cache across CPUs)."""
+        req = _write(tmp_path / 'req.txt', 'polars>=1.0.0\n')
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
+        hash_avx2 = depends._compute_hash([str(req)])
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: True)
+        hash_no_avx2 = depends._compute_hash([str(req)])
+        assert hash_avx2 != hash_no_avx2
+        assert depends._compute_hash([str(req)]) == hash_no_avx2
 
 
 class TestCombineRequirements:
@@ -262,6 +273,44 @@ class TestIsX86_64MissingAvx2:
             mock_kernel32.IsProcessorFeaturePresent.side_effect = Exception('Failed')
             depends._is_x86_64_missing_avx2.cache_clear()
             assert depends._is_x86_64_missing_avx2() is True
+
+
+class TestReconcilePolarsVariant:
+    def test_uninstalls_wrong_build(self, monkeypatch):
+        """Already-installed wrong Polars variant must be removed (excludes won't do it)."""
+        calls = []
+        monkeypatch.setattr(depends, 'pip', lambda *args: calls.append(args) or True)
+
+        def version_polars(name):
+            if name == 'polars':
+                return '1.0.0'
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: True)
+        monkeypatch.setattr(importlib.metadata, 'version', version_polars)
+        depends._reconcile_polars_variant()
+        assert calls == [('uninstall', '-y', 'polars')]
+
+        calls.clear()
+
+        def version_lts(name):
+            if name == 'polars-lts-cpu':
+                return '1.0.0'
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
+        monkeypatch.setattr(importlib.metadata, 'version', version_lts)
+        depends._reconcile_polars_variant()
+        assert calls == [('uninstall', '-y', 'polars-lts-cpu')]
+
+    def test_noop_when_absent(self, monkeypatch):
+        def missing(name):
+            raise importlib.metadata.PackageNotFoundError(name)
+
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: True)
+        monkeypatch.setattr(importlib.metadata, 'version', missing)
+        monkeypatch.setattr(depends, 'pip', lambda *a: pytest.fail('pip must not run'))
+        depends._reconcile_polars_variant()
 
 
 class TestEnsureConstraints:

@@ -878,7 +878,9 @@ def _excludes_content() -> str:
 
     Also conditionally excludes the incorrect polars distribution for the current CPU.
     polars and polars-lts-cpu both provide ``import polars`` and cannot be installed
-    together; ``--excludes`` keeps uv from resolving both.
+    together; ``--excludes`` keeps uv from resolving both. Excludes only affect
+    resolution — see ``_reconcile_polars_variant`` for removing an already-installed
+    wrong variant.
     """
     excludes = 'uv\n'
     if platform.system() != 'Darwin':
@@ -900,6 +902,36 @@ def _write_excludes_file() -> str:
     with open(excludes_path, 'w', encoding='utf-8') as f:
         f.write(_excludes_content())
     return excludes_path
+
+
+def _reconcile_polars_variant() -> None:
+    """Uninstall any already-installed Polars distribution that doesn't match this CPU.
+
+    ``--excludes`` only changes resolution; ``uv pip install`` never removes an
+    already-present distribution. A cache/image built on an AVX2 host and later run
+    under Rosetta or on a pre-Haswell CPU can therefore keep standard ``polars``
+    alongside newly-installed ``polars-lts-cpu``. Both provide ``import polars`` and
+    collide — exactly the mismatched-native-binary crash this path exists to prevent.
+    Mirror the cleanup in the other direction as well.
+    """
+    import importlib
+    import importlib.metadata
+
+    missing_avx2 = _is_x86_64_missing_avx2()
+    unwanted = 'polars' if missing_avx2 else 'polars-lts-cpu'
+    wanted = 'polars-lts-cpu' if missing_avx2 else 'polars'
+
+    try:
+        importlib.metadata.version(unwanted)
+    except importlib.metadata.PackageNotFoundError:
+        return
+
+    debug(f'Removing incompatible Polars distribution {unwanted!r} (selected {wanted!r})')
+    if pip('uninstall', '-y', unwanted):
+        importlib.invalidate_caches()
+        sys.modules.pop('polars', None)
+    else:
+        debug(f'Failed to uninstall incompatible Polars distribution {unwanted!r}')
 
 
 # ---------------------------------------------------------------------------
@@ -1290,16 +1322,20 @@ def depends(requirements: Optional[str] = None):
         # Phase 1: Bootstrap
         bootstrap()
 
-        # Phase 2: Ensure constraints
+        # Phase 2: Drop any Polars build that doesn't match this CPU before resolution.
+        # --excludes alone cannot remove an already-present distribution.
+        _reconcile_polars_variant()
+
+        # Phase 3: Ensure constraints
         constraints_path = ensure_constraints()
 
-        # Phase 3: Install if requirements provided
+        # Phase 4: Install if requirements provided
         if requirements:
             _install_requirements(requirements, constraints_path)
             _processed.add(requirements)
             debug(f'  Completed: {os.path.basename(requirements)}')
 
-        # Phase 4: Apply platform-specific hacks (after packages may have been installed)
+        # Phase 5: Apply platform-specific hacks (after packages may have been installed)
         _apply_pywin32_hack()
 
 
@@ -1341,6 +1377,9 @@ def main():
     with FileLock(lock_path):
         # Bootstrap environment
         bootstrap()
+
+        # Drop any Polars build that doesn't match this CPU before resolution.
+        _reconcile_polars_variant()
 
         # Ensure constraints are ready
         ensure_constraints()

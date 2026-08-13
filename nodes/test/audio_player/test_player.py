@@ -1,14 +1,103 @@
+# =============================================================================
+# MIT License
+# Copyright (c) 2026 Aparavi Software AG
+# =============================================================================
+
+"""
+Unit tests for audio_player start/stop sentinel behavior.
+
+sounddevice and AudioReader are stubbed so collection does not need PortAudio
+or avi depends(). Usage: ./builder nodes:test --pytest-pattern=audio_player
+"""
+
+import contextlib
+import importlib.util
 import sys
-import os
-import pytest
 import threading
+import types
+from pathlib import Path
+from typing import Iterator
+from unittest.mock import MagicMock, patch
+
 import numpy as np
-from unittest.mock import patch, MagicMock
+import pytest
 
-# Add the audio_player node to sys.path so we can import player
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../src/nodes/audio_player')))
+_PKG = '_audio_player_direct'
+_PKG_DIR = Path(__file__).parent.parent.parent / 'src' / 'nodes' / 'audio_player'
+_STUB_NAMES = ('sounddevice', 'ai', 'ai.common', 'ai.common.avi', 'ai.common.avi.audio')
 
-from player import Player
+
+class _AudioReader:
+    """Stand-in for ``ai.common.avi.audio.AudioReader`` (start/stop only)."""
+
+    def __init__(self, **_kwargs):
+        pass
+
+    def start(self):
+        pass
+
+    def stop(self):
+        pass
+
+
+def _install_stubs() -> None:
+    """Plant fake modules so player.py can import without PortAudio or avi deps."""
+    sd = types.ModuleType('sounddevice')
+
+    class CallbackStop(Exception):
+        pass
+
+    sd.CallbackStop = CallbackStop
+    sd.OutputStream = MagicMock
+    sd.query_devices = MagicMock(return_value=[])
+    sys.modules['sounddevice'] = sd
+
+    for name in ('ai', 'ai.common', 'ai.common.avi'):
+        mod = types.ModuleType(name)
+        mod.__path__ = []
+        sys.modules[name] = mod
+
+    audio = types.ModuleType('ai.common.avi.audio')
+    audio.AudioReader = _AudioReader
+    sys.modules['ai.common.avi.audio'] = audio
+
+
+@contextlib.contextmanager
+def _scoped_stubs() -> Iterator[None]:
+    """Install stub modules for the block, restoring sys.modules on exit."""
+    snapshot = {name: sys.modules.get(name) for name in _STUB_NAMES}
+    _install_stubs()
+    try:
+        yield
+    finally:
+        for name, mod in snapshot.items():
+            if mod is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = mod
+
+
+def _load_player():
+    """Load player.py as a package member so its relative IGlobal import resolves."""
+    with _scoped_stubs():
+        pkg = types.ModuleType(_PKG)
+        pkg.__path__ = [str(_PKG_DIR)]
+        sys.modules[_PKG] = pkg
+
+        spec_g = importlib.util.spec_from_file_location(f'{_PKG}.IGlobal', _PKG_DIR / 'IGlobal.py')
+        mod_g = importlib.util.module_from_spec(spec_g)
+        sys.modules[f'{_PKG}.IGlobal'] = mod_g
+        spec_g.loader.exec_module(mod_g)
+
+        spec = importlib.util.spec_from_file_location(f'{_PKG}.player', _PKG_DIR / 'player.py')
+        mod = importlib.util.module_from_spec(spec)
+        sys.modules[f'{_PKG}.player'] = mod
+        spec.loader.exec_module(mod)
+        return mod
+
+
+player_mod = _load_player()
+Player = player_mod.Player
 
 
 def _advancing_clock(start=0.0, step=None):
@@ -35,13 +124,13 @@ def player_instance():
     return Player(lock=threading.Lock())
 
 
-@patch('player.sd.OutputStream')
-@patch('player.sd.query_devices')
+@patch.object(player_mod.sd, 'OutputStream')
+@patch.object(player_mod.sd, 'query_devices')
 def test_start_success(mock_query, mock_stream, player_instance):
     """Test start() succeeds if there is a valid output device."""
     mock_query.return_value = [{'max_output_channels': 2}]
 
-    with patch('player.AudioReader.start') as mock_super_start:
+    with patch.object(player_mod.AudioReader, 'start') as mock_super_start:
         player_instance.start()
 
     mock_query.assert_called_once()
@@ -49,7 +138,7 @@ def test_start_success(mock_query, mock_stream, player_instance):
     mock_super_start.assert_called_once()
 
 
-@patch('player.sd.query_devices')
+@patch.object(player_mod.sd, 'query_devices')
 def test_start_no_hardware(mock_query, player_instance):
     """Test start() raises RuntimeError if no devices have max_output_channels > 0."""
     mock_query.return_value = [{'max_output_channels': 0}]
@@ -58,7 +147,7 @@ def test_start_no_hardware(mock_query, player_instance):
         player_instance.start()
 
 
-@patch('player.sd.query_devices')
+@patch.object(player_mod.sd, 'query_devices')
 def test_start_library_error(mock_query, player_instance):
     """Test start() raises generic library RuntimeError if query_devices() fails."""
     mock_query.side_effect = Exception('PortAudio broken')
@@ -74,7 +163,7 @@ def test_stop_normal(player_instance):
     # Simulate normal playback finished state
     player_instance._playback_finished = True
 
-    with patch('player.AudioReader.stop') as mock_super_stop:
+    with patch.object(player_mod.AudioReader, 'stop') as mock_super_stop:
         player_instance.stop()
 
     mock_super_stop.assert_called_once()
@@ -84,7 +173,7 @@ def test_stop_normal(player_instance):
     assert player_instance._stream is None
 
 
-@patch('player.warning')
+@patch.object(player_mod, 'warning')
 @patch('time.sleep', return_value=None)
 @patch('time.monotonic')
 def test_stop_timeout(mock_monotonic, mock_sleep, mock_warning, player_instance):
@@ -96,7 +185,7 @@ def test_stop_timeout(mock_monotonic, mock_sleep, mock_warning, player_instance)
 
     mock_monotonic.side_effect = _advancing_clock()
 
-    with patch('player.AudioReader.stop'):
+    with patch.object(player_mod.AudioReader, 'stop'):
         player_instance.stop()
 
     stream.abort.assert_called_once()
@@ -106,9 +195,9 @@ def test_stop_timeout(mock_monotonic, mock_sleep, mock_warning, player_instance)
     assert player_instance._stream is None
 
 
-@patch('player.sd.OutputStream')
-@patch('player.sd.query_devices')
-@patch('player.warning')
+@patch.object(player_mod.sd, 'OutputStream')
+@patch.object(player_mod.sd, 'query_devices')
+@patch.object(player_mod, 'warning')
 @patch('time.sleep', return_value=None)
 @patch('time.monotonic')
 def test_start_after_stop_timeout_plays_audio(
@@ -120,12 +209,12 @@ def test_start_after_stop_timeout_plays_audio(
     player_instance._playback_finished = False
     mock_monotonic.side_effect = _advancing_clock()
 
-    with patch('player.AudioReader.stop'):
+    with patch.object(player_mod.AudioReader, 'stop'):
         player_instance.stop()
 
     stream.abort.assert_called_once()
     mock_query.return_value = [{'max_output_channels': 2}]
-    with patch('player.AudioReader.start'):
+    with patch.object(player_mod.AudioReader, 'start'):
         player_instance.start()
 
     frames = 1024

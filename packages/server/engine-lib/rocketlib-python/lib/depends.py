@@ -744,6 +744,7 @@ def _is_x86_64_missing_avx2() -> bool:
     elif system == 'Windows':
         try:
             import ctypes
+
             kernel32 = ctypes.windll.kernel32
             kernel32.IsProcessorFeaturePresent.argtypes = [ctypes.c_uint32]
             kernel32.IsProcessorFeaturePresent.restype = ctypes.c_int

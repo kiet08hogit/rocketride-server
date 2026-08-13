@@ -1225,7 +1225,7 @@ function makeRocketlibPythonTestAction(options = {}) {
 			const exeExt = isWindows() ? '.exe' : '';
 			const engine = path.join(DIST_DIR, 'engine' + exeExt);
 
-			const extraArgs = ['-v', '--rootdir', path.join(SERVER_DIR, 'engine-lib', 'rocketlib-python')];
+			const extraArgs = ['-v'];
 			if (options.pytest) {
 				const tokens = typeof options.pytest === 'string'
 					? options.pytest.split(/\s+/).filter(Boolean)

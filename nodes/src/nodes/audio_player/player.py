@@ -32,7 +32,7 @@ except (ImportError, OSError) as e:
         'The \'sounddevice\' library requires PortAudio to be installed on your system. '
         'Cannot load audio_player node.'
     ) from e
-from rocketlib import debug
+from rocketlib import warning
 from ai.common.avi.audio import AudioReader
 from .IGlobal import IGlobal
 
@@ -164,7 +164,9 @@ class Player(AudioReader):
         """
         Start the audio playback stream and the data extractor.
         """
-        # Initialize internal buffers
+        # Initialize internal buffers. Recreate the queue so a stale stop()
+        # sentinel from a timed-out previous cycle cannot mute this stream.
+        self._play_queue = queue.Queue(maxsize=self.MAX_QUEUE_SIZE)
         self._chunk_accumulator = bytearray()
         self._play_callback_buffer = bytearray()
         self._playback_finished = False
@@ -203,7 +205,11 @@ class Player(AudioReader):
         # Stop parent processing
         super().stop()
 
-        # Wait until the queue is drained and all buffered audio is played
+        # `_playback_finished` flips only after the callback consumes the
+        # trailing sentinel, which also drains everything queued ahead of it.
+        # Do not also wait on `_play_queue.empty()`: a leftover sentinel from
+        # stop() is never consumed once the callback has finished, and that
+        # check would stall until STOP_TIMEOUT on every normal EOF.
         start_wait_time = time.monotonic()
         sentinel_sent = False
         while len(self._play_callback_buffer) > 0 or not self._playback_finished:
@@ -215,7 +221,7 @@ class Player(AudioReader):
                     pass
 
             if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
-                debug('Warning: Audio playback stop timed out. Forcing stop.')
+                warning('audio_player: stop timed out, forcing stream stop')
                 break
             time.sleep(0.1)  # Wait 100ms
 

@@ -25,12 +25,12 @@ import threading
 import queue
 import time
 import numpy as np
+
 try:
     import sounddevice as sd
 except (ImportError, OSError) as e:
     raise RuntimeError(
-        'The \'sounddevice\' library requires PortAudio to be installed on your system. '
-        'Cannot load audio_player node.'
+        "The 'sounddevice' library requires PortAudio to be installed on your system. Cannot load audio_player node."
     ) from e
 from rocketlib import warning
 from ai.common.avi.audio import AudioReader
@@ -176,7 +176,7 @@ class Player(AudioReader):
             devices = sd.query_devices()
         except Exception as e:
             raise RuntimeError(
-                'The \'sounddevice\' library encountered an error checking for audio hardware. '
+                "The 'sounddevice' library encountered an error checking for audio hardware. "
                 'Cannot start audio playback.'
             ) from e
 

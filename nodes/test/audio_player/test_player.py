@@ -40,10 +40,10 @@ def player_instance():
 def test_start_success(mock_query, mock_stream, player_instance):
     """Test start() succeeds if there is a valid output device."""
     mock_query.return_value = [{'max_output_channels': 2}]
-    
+
     with patch('player.AudioReader.start') as mock_super_start:
         player_instance.start()
-        
+
     mock_query.assert_called_once()
     mock_stream.assert_called_once()
     mock_super_start.assert_called_once()
@@ -53,7 +53,7 @@ def test_start_success(mock_query, mock_stream, player_instance):
 def test_start_no_hardware(mock_query, player_instance):
     """Test start() raises RuntimeError if no devices have max_output_channels > 0."""
     mock_query.return_value = [{'max_output_channels': 0}]
-    
+
     with pytest.raises(RuntimeError, match='No audio output hardware detected'):
         player_instance.start()
 
@@ -61,8 +61,8 @@ def test_start_no_hardware(mock_query, player_instance):
 @patch('player.sd.query_devices')
 def test_start_library_error(mock_query, player_instance):
     """Test start() raises generic library RuntimeError if query_devices() fails."""
-    mock_query.side_effect = Exception("PortAudio broken")
-    
+    mock_query.side_effect = Exception('PortAudio broken')
+
     with pytest.raises(RuntimeError, match='library encountered an error checking for audio hardware'):
         player_instance.start()
 

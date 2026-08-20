@@ -105,6 +105,29 @@ class TestCombineRequirements:
         assert text == f'# Source: {a}\npkg-a\n\n# Source: {b}\npkg-b>=1\n\n'
         assert text.index('pkg-a') < text.index('pkg-b')
 
+    def test_drops_unwanted_polars(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: False)
+        src = _write(tmp_path / 'requirements.txt', 'polars>=1.0.0\npolars-lts-cpu>=1.0.0\n')
+        out = tmp_path / 'combined.txt'
+
+        depends._combine_requirements([str(src)], str(out))
+
+        contents = out.read_text(encoding='utf-8')
+        assert 'polars>=1.0.0\n' in contents.replace('polars-lts-cpu>=1.0.0', '')
+        assert '# excluded for this CPU: polars-lts-cpu>=1.0.0' in contents
+
+    def test_keeps_lts_when_avx2_missing(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(depends, '_is_x86_64_missing_avx2', lambda: True)
+        src = _write(tmp_path / 'requirements.txt', 'polars>=1.0.0\npolars-lts-cpu>=1.0.0\n')
+        out = tmp_path / 'combined.txt'
+
+        depends._combine_requirements([str(src)], str(out))
+
+        contents = out.read_text(encoding='utf-8')
+        assert 'polars-lts-cpu>=1.0.0\n' in contents
+        assert '# excluded for this CPU: polars>=1.0.0' in contents
+        assert '\npolars>=1.0.0\n' not in '\n' + contents
+
 
 class TestConstraintsArgs:
     def test_empty_when_constraints_missing_or_empty(self, tmp_path):
@@ -311,6 +334,29 @@ class TestReconcilePolarsVariant:
         monkeypatch.setattr(importlib.metadata, 'version', missing)
         monkeypatch.setattr(depends, 'pip', lambda *a: pytest.fail('pip must not run'))
         depends._reconcile_polars_variant()
+
+
+class TestPolarsRequirementFilter:
+    def test_requirement_dist_name_exact_match(self):
+        assert depends._requirement_dist_name('polars>=1.0.0\n') == 'polars'
+        assert depends._requirement_dist_name('polars-lts-cpu>=1.0.0\n') == 'polars-lts-cpu'
+        assert depends._requirement_dist_name('polars[pandas]>=1.2\n') == 'polars'
+        assert depends._requirement_dist_name('# polars>=1.0.0\n') is None
+        assert depends._requirement_dist_name('\n') is None
+
+    def test_copy_requirements_excluding_does_not_match_lts_as_polars(self, tmp_path):
+        """Stripping `polars` must not also strip `polars-lts-cpu`."""
+        src = _write(tmp_path / 'requirements.txt', 'img2table\npolars>=1.0.0\npolars-lts-cpu>=1.0.0\n')
+        dest = tmp_path / 'filtered.txt'
+
+        excluded = depends._copy_requirements_excluding(str(src), str(dest), {'polars'})
+
+        assert excluded is True
+        contents = dest.read_text(encoding='utf-8')
+        assert 'img2table\n' in contents
+        assert 'polars-lts-cpu>=1.0.0\n' in contents
+        assert '# excluded for this CPU: polars>=1.0.0' in contents
+        assert '\npolars>=1.0.0\n' not in contents
 
 
 class TestEnsureConstraints:
@@ -536,7 +582,7 @@ class TestSatisfiedVerdict:
     def test_schema_bump_invalidates_every_verdict(self, env, monkeypatch):
         """Bumping the schema retires verdicts recorded under the old resolve semantics."""
         self._cold_process(env)
-        monkeypatch.setattr(depends, '_VERDICT_SCHEMA', '2')
+        monkeypatch.setattr(depends, '_VERDICT_SCHEMA', '3')
         self._cold_process(env)
 
         assert len(env.resolves) == 2

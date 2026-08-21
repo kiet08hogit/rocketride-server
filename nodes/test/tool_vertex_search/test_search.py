@@ -27,52 +27,63 @@ def _tool_function(**meta):
     return wrap
 
 
-_CORE_STUBS = ('rocketlib', 'ai', 'ai.common', 'ai.common.tool')
+def _build_ai_stubs() -> dict:
+    """Stubs used only when the real ``ai`` package is not already imported.
 
-
-def _install_stubs() -> dict:
-    saved = {name: sys.modules.get(name) for name in _CORE_STUBS}
-
-    stub = types.ModuleType('rocketlib')
-
-    class _IInstanceBase:
-        pass
-
-    stub.IInstanceBase = _IInstanceBase
-    stub.tool_function = _tool_function
-    sys.modules['rocketlib'] = stub
-
+    Never clobber a real ``ai`` / ``ai.common`` package — replacing them with a
+    non-package ``types.ModuleType`` leaks into later node tests (see #1640).
+    """
     ai = types.ModuleType('ai')
     ai_common = types.ModuleType('ai.common')
     ai_common_tool = types.ModuleType('ai.common.tool')
     ai_common_tool.tool_function = _tool_function
     ai.common = ai_common
     ai_common.tool = ai_common_tool
-    sys.modules['ai'] = ai
-    sys.modules['ai.common'] = ai_common
-    sys.modules['ai.common.tool'] = ai_common_tool
-
-    if 'tool_vertex_search' not in sys.modules:
-        pkg = types.ModuleType('tool_vertex_search')
-        pkg.__path__ = [str(_NODE_DIR)]
-        sys.modules['tool_vertex_search'] = pkg
-
-    return saved
+    return {
+        'ai': ai,
+        'ai.common': ai_common,
+        'ai.common.tool': ai_common_tool,
+    }
 
 
-def _restore_stubs(saved: dict) -> None:
-    for name, prev in saved.items():
-        if prev is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = prev
+_saved_rocketlib = sys.modules.get('rocketlib')
+_added = []
+
+_rl = types.ModuleType('rocketlib')
 
 
-_saved_stubs = _install_stubs()
+class _IInstanceBase:
+    pass
 
-from tool_vertex_search.IInstance import IInstance  # noqa: E402
 
-_restore_stubs(_saved_stubs)
+_rl.IInstanceBase = _IInstanceBase
+_rl.tool_function = _tool_function
+sys.modules['rocketlib'] = _rl
+
+for _name, _stub in _build_ai_stubs().items():
+    if _name not in sys.modules:
+        sys.modules[_name] = _stub
+        _added.append(_name)
+
+_added_pkg = 'tool_vertex_search' not in sys.modules
+if _added_pkg:
+    _pkg = types.ModuleType('tool_vertex_search')
+    _pkg.__path__ = [str(_NODE_DIR)]
+    sys.modules['tool_vertex_search'] = _pkg
+
+try:
+    from tool_vertex_search.IInstance import IInstance  # noqa: E402
+finally:
+    if _saved_rocketlib is None:
+        sys.modules.pop('rocketlib', None)
+    else:
+        sys.modules['rocketlib'] = _saved_rocketlib
+    for _name in _added:
+        sys.modules.pop(_name, None)
+    if _added_pkg:
+        for _name in list(sys.modules):
+            if _name == 'tool_vertex_search' or _name.startswith('tool_vertex_search.'):
+                sys.modules.pop(_name, None)
 
 
 def _make_instance(neighbors):

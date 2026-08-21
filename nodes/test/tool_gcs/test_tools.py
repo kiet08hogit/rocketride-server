@@ -28,28 +28,12 @@ def _tool_function(**meta):
     return wrap
 
 
-_CORE_STUBS = ('rocketlib', 'ai', 'ai.common', 'ai.common.tool', 'ai.common.config')
+def _build_ai_stubs() -> dict:
+    """Stubs used only when the real ``ai`` package is not already imported.
 
-
-def _install_stubs() -> dict:
-    saved = {name: sys.modules.get(name) for name in _CORE_STUBS}
-
-    stub = types.ModuleType('rocketlib')
-
-    class _IInstanceBase:
-        pass
-
-    class _IGlobalBase:
-        pass
-
-    stub.IInstanceBase = _IInstanceBase
-    stub.IGlobalBase = _IGlobalBase
-    stub.tool_function = _tool_function
-    stub.OPEN_MODE = types.SimpleNamespace(CONFIG='config')
-    stub.debug = lambda *a, **kw: None
-    stub.warning = lambda *a, **kw: None
-    sys.modules['rocketlib'] = stub
-
+    Never clobber a real ``ai`` / ``ai.common`` package — replacing them with a
+    non-package ``types.ModuleType`` leaks into later node tests (see #1640).
+    """
     ai = types.ModuleType('ai')
     ai_common = types.ModuleType('ai.common')
     ai_common_tool = types.ModuleType('ai.common.tool')
@@ -59,33 +43,61 @@ def _install_stubs() -> dict:
     ai.common = ai_common
     ai_common.tool = ai_common_tool
     ai_common.config = ai_common_config
-    sys.modules['ai'] = ai
-    sys.modules['ai.common'] = ai_common
-    sys.modules['ai.common.tool'] = ai_common_tool
-    sys.modules['ai.common.config'] = ai_common_config
-
-    if 'tool_gcs' not in sys.modules:
-        pkg = types.ModuleType('tool_gcs')
-        pkg.__path__ = [str(_NODE_DIR)]
-        sys.modules['tool_gcs'] = pkg
-
-    return saved
+    return {
+        'ai': ai,
+        'ai.common': ai_common,
+        'ai.common.tool': ai_common_tool,
+        'ai.common.config': ai_common_config,
+    }
 
 
-def _restore_stubs(saved: dict) -> None:
-    for name, prev in saved.items():
-        if prev is None:
-            sys.modules.pop(name, None)
-        else:
-            sys.modules[name] = prev
+_saved_rocketlib = sys.modules.get('rocketlib')
+_added = []
+
+_rl = types.ModuleType('rocketlib')
 
 
-_saved_stubs = _install_stubs()
+class _IInstanceBase:
+    pass
 
-from tool_gcs.IGlobal import IGlobal  # noqa: E402
-from tool_gcs.IInstance import IInstance, join_gcs_prefix  # noqa: E402
 
-_restore_stubs(_saved_stubs)
+class _IGlobalBase:
+    pass
+
+
+_rl.IInstanceBase = _IInstanceBase
+_rl.IGlobalBase = _IGlobalBase
+_rl.tool_function = _tool_function
+_rl.OPEN_MODE = types.SimpleNamespace(CONFIG='config')
+_rl.debug = lambda *a, **kw: None
+_rl.warning = lambda *a, **kw: None
+sys.modules['rocketlib'] = _rl
+
+for _name, _stub in _build_ai_stubs().items():
+    if _name not in sys.modules:
+        sys.modules[_name] = _stub
+        _added.append(_name)
+
+_added_pkg = 'tool_gcs' not in sys.modules
+if _added_pkg:
+    _pkg = types.ModuleType('tool_gcs')
+    _pkg.__path__ = [str(_NODE_DIR)]
+    sys.modules['tool_gcs'] = _pkg
+
+try:
+    from tool_gcs.IGlobal import IGlobal  # noqa: E402
+    from tool_gcs.IInstance import IInstance, join_gcs_prefix  # noqa: E402
+finally:
+    if _saved_rocketlib is None:
+        sys.modules.pop('rocketlib', None)
+    else:
+        sys.modules['rocketlib'] = _saved_rocketlib
+    for _name in _added:
+        sys.modules.pop(_name, None)
+    if _added_pkg:
+        for _name in list(sys.modules):
+            if _name == 'tool_gcs' or _name.startswith('tool_gcs.'):
+                sys.modules.pop(_name, None)
 
 
 def test_join_gcs_prefix_empty():

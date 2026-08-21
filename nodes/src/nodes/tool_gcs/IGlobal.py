@@ -14,6 +14,8 @@ except ImportError:
 _GCS_SCOPES = ['https://www.googleapis.com/auth/devstorage.read_only']
 # 50 MiB default download cap — keeps agents from filling server disk.
 _DEFAULT_MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024
+# Only the most recent download is kept; a new download deletes the previous temp file.
+_MAX_RETAINED_TEMP_FILES = 1
 
 
 class IGlobal(IGlobalBase):
@@ -80,13 +82,24 @@ class IGlobal(IGlobalBase):
         except Exception as e:
             warning(str(e))
 
+    def _remove_temp_path(self, path: str) -> None:
+        try:
+            if path and os.path.exists(path):
+                os.remove(path)
+        except OSError as e:
+            warning(f'tool_gcs: failed to remove temp file {path}: {e}')
+
+    def retain_temp_file(self, path: str) -> None:
+        """Track ``path`` and delete older downloads so disk use stays bounded."""
+        if self.temp_files is None:
+            self.temp_files = []
+        while len(self.temp_files) >= _MAX_RETAINED_TEMP_FILES:
+            self._remove_temp_path(self.temp_files.pop(0))
+        self.temp_files.append(path)
+
     def endGlobal(self) -> None:
         for path in list(self.temp_files or []):
-            try:
-                if path and os.path.exists(path):
-                    os.remove(path)
-            except OSError as e:
-                warning(f'tool_gcs: failed to remove temp file {path}: {e}')
+            self._remove_temp_path(path)
         self.temp_files = None
 
         if self.client is not None:

@@ -1,26 +1,23 @@
-import pytest
+"""
+Unit tests for the shared GCP credential resolver (core/gcp_auth.py).
+
+Pure logic, no server or live API needed:
+
+    pytest nodes/test/core/test_gcp_auth.py -v
+"""
+
+from __future__ import annotations
+
 import sys
-from unittest.mock import patch, MagicMock
-
-# --- Stub engine dependencies so pytest can collect without error ---
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
-_NODES_SRC = Path(__file__).resolve().parents[2] / 'src'
-if str(_NODES_SRC) not in sys.path:
-    sys.path.insert(0, str(_NODES_SRC))
+import pytest
 
-_added = []
-if 'depends' not in sys.modules:
-    depends = MagicMock()
-    depends.depends = lambda *a, **kw: None
-    sys.modules['depends'] = depends
-    _added.append('depends')
-
-from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError, _DEFAULT_SCOPES
-
-for _name in _added:
-    sys.modules.pop(_name, None)
-# -------------------------------------------------------------------
+# core/ is a flat dir of engine-loaded modules (no __init__.py) and nodes/src is
+# not on pytest's pythonpath, so import the module by adding its dir to sys.path.
+sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src' / 'nodes' / 'core'))
+from gcp_auth import GCPAuthError, _DEFAULT_SCOPES, get_gcp_credentials  # noqa: E402
 
 
 def test_get_gcp_credentials_adc_success():

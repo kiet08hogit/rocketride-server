@@ -2,6 +2,7 @@ from ai.common.tool import tool_function
 from rocketlib import IInstanceBase
 from typing import Dict, Any
 
+
 class IInstance(IInstanceBase):
     """Firestore instance, providing tool functions for reading and writing documents."""
 
@@ -10,17 +11,17 @@ class IInstance(IInstanceBase):
         args={
             'collection': 'The collection name.',
             'document_id': 'The ID of the document to set. If empty, a new ID will be generated.',
-            'data': 'The JSON dictionary to store in the document.'
-        }
+            'data': 'The JSON dictionary to store in the document.',
+        },
     )
     def set_document(self, collection: str, document_id: str, data: Dict[str, Any]) -> str:
         client = self.glb.client
         if not client:
             return 'Error: Firestore client is not connected.'
-        
+
         if not collection:
             collection = self.glb.collection
-        
+
         try:
             coll_ref = client.collection(collection)
             if document_id:
@@ -35,19 +36,16 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         description='Get a single document from a Firestore collection.',
-        args={
-            'collection': 'The collection name.',
-            'document_id': 'The document ID.'
-        }
+        args={'collection': 'The collection name.', 'document_id': 'The document ID.'},
     )
     def get_document(self, collection: str, document_id: str) -> Dict[str, Any]:
         client = self.glb.client
         if not client:
             return {'error': 'Firestore client is not connected.'}
-        
+
         if not collection:
             collection = self.glb.collection
-            
+
         try:
             doc = client.collection(collection).document(document_id).get()
             if doc.exists:

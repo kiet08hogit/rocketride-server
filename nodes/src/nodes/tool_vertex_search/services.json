@@ -1,11 +1,11 @@
 {
 	"title": "Vertex AI Vector Search",
-	"protocol": "vectordb_vertex://",
+	"protocol": "tool_vertex_search://",
 	"classType": ["tool"],
 	"capabilities": ["noremote", "invoke"],
 	"register": "filter",
 	"node": "python",
-	"path": "nodes.vectordb_vertex",
+	"path": "nodes.tool_vertex_search",
 	"prefix": "vertex",
 	"description": ["A processing component that interacts with Google Vertex AI Vector Search."],
 	"icon": "vertex.svg",

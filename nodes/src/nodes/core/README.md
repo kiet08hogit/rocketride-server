@@ -10,7 +10,7 @@ The directory holds three kinds of content:
 
 - **Concrete service definitions**: `services.filesys.json`, `services.parse.json`, `services.hash.json`, `services.indexer.json`, `services.zip.json`, and `services.null.json` each register one engine service (title, protocol, class type, capabilities, lanes, and config shape).
 - **Shared field libraries**: the `services.common*.json` files define reusable field groups (cloud-provider credentials, include/exclude path forms, vector-store settings, LLM access, anonymization, remote processing) that are merged into other service definitions as required.
-- **Shared code and assets**: `google_access.py` (the access/scope resolver used by Google tool nodes) and the SVG icons displayed in the UI for connector and processing nodes (Amazon S3, Azure Blob, Google Drive, OneDrive, SharePoint, Outlook, Gmail, Confluence, Slack, SMB, and others).
+- **Shared code and assets**: `google_access.py` (the access/scope resolver used by Google tool nodes), `gcp_auth.py` (ADC and service-account credentials for GCP nodes), and the SVG icons displayed in the UI for connector and processing nodes (Amazon S3, Azure Blob, Google Drive, OneDrive, SharePoint, Outlook, Gmail, Confluence, Slack, SMB, and others).
 
 The `hash/` and `parser/` subdirectories carry the per-service documentation pages for the Fingerprinter and Parser services.
 

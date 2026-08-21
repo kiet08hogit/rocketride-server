@@ -54,7 +54,7 @@ class IGlobal(IGlobalBase):
                 location=self.location,
                 credentials=creds,
             )
-            debug(f'vectordb_vertex: connected to index endpoint {index_endpoint_id}')
+            debug(f'tool_vertex_search: connected to index endpoint {index_endpoint_id}')
         except Exception as e:
             warning(f'Vertex AI connection check failed: {e}')
             raise

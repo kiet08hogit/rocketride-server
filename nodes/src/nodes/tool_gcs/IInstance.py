@@ -5,14 +5,30 @@ import tempfile
 import os
 
 
+def join_gcs_prefix(node_prefix: str, extra: str = '') -> str:
+    """Join the configured bucket prefix with an optional runtime path.
+
+    A non-empty node prefix always ends with ``/`` so ``list_blobs`` matches
+    that directory rather than any key that merely starts with the same text.
+    """
+    full_prefix = ''
+    if node_prefix:
+        full_prefix = node_prefix.rstrip('/') + '/'
+    if extra:
+        full_prefix += extra.lstrip('/')
+    return full_prefix
+
+
 class IInstance(IInstanceBase):
     """GCS instance, providing tool functions for reading and listing files."""
 
     @tool_function(
         description=(
             'Download a file from Google Cloud Storage. Returns a dictionary containing '
-            'the local temporary path of the downloaded file. Temp files are removed when '
-            'the node shuts down (endGlobal). Objects larger than the configured maxDownloadBytes are rejected.'
+            'the local temporary path of the downloaded file. Only the most recent download '
+            'is retained; a new download deletes the previous temp file. Remaining files are '
+            'removed when the node shuts down (endGlobal). Objects larger than the configured '
+            'maxDownloadBytes are rejected.'
         ),
         args={'file_name': 'The name/path of the file in the bucket to download.'},
     )
@@ -25,9 +41,7 @@ class IInstance(IInstanceBase):
         if not bucket_name:
             return {'error': 'Bucket name not configured.'}
 
-        # Optional prefix prefixing
-        if self.glb.prefix:
-            file_name = f'{self.glb.prefix.rstrip("/")}/{file_name.lstrip("/")}'
+        file_name = join_gcs_prefix(self.glb.prefix, file_name)
 
         temp_path = None
         try:
@@ -48,11 +62,20 @@ class IInstance(IInstanceBase):
             fd, temp_path = tempfile.mkstemp(prefix='gcs_')
             os.close(fd)
             blob.download_to_filename(temp_path)
-            if self.glb.temp_files is None:
-                self.glb.temp_files = []
-            self.glb.temp_files.append(temp_path)
+            # Re-check after download: the object can change between reload() and fetch.
+            actual_size = os.path.getsize(temp_path)
+            if actual_size > max_bytes:
+                os.remove(temp_path)
+                temp_path = None
+                return {
+                    'error': (
+                        f'Object {file_name!r} downloaded {actual_size} bytes, which exceeds '
+                        f'maxDownloadBytes ({max_bytes}). Increase the limit or download a smaller object.'
+                    )
+                }
 
-            return {'success': True, 'local_path': temp_path, 'size': size}
+            self.glb.retain_temp_file(temp_path)
+            return {'success': True, 'local_path': temp_path, 'size': actual_size}
         except Exception as e:
             if temp_path and os.path.exists(temp_path):
                 os.remove(temp_path)
@@ -74,12 +97,7 @@ class IInstance(IInstanceBase):
         if not bucket_name:
             return ['Error: Bucket name not configured.']
 
-        # Combine node-level prefix and runtime prefix
-        full_prefix = ''
-        if self.glb.prefix:
-            full_prefix = self.glb.prefix.rstrip('/') + '/'
-        if prefix:
-            full_prefix += prefix.lstrip('/')
+        full_prefix = join_gcs_prefix(self.glb.prefix, prefix)
 
         try:
             bucket = client.bucket(bucket_name)

@@ -8,9 +8,12 @@ Pure logic, no server or live API needed:
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import sys
 import types
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -20,39 +23,68 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src' / 'nodes' / 'core'))
 from gcp_auth import GCPAuthError, _DEFAULT_SCOPES, get_gcp_credentials  # noqa: E402
 
+_MISSING = object()
 
-def _install_google_auth_stubs() -> list[str]:
+
+def _cannot_import(name: str) -> bool:
+    """True when ``name`` is not already loaded and cannot be found on disk.
+
+    A ``None`` entry in ``sys.modules`` is a failed import, not a loaded module.
+    """
+    if sys.modules.get(name) is not None:
+        return False
+    try:
+        return importlib.util.find_spec(name) is None
+    except (ImportError, ModuleNotFoundError, ValueError):
+        return True
+
+
+def _install_google_auth_stubs() -> tuple[list[str], list[tuple[Any, str, Any]]]:
     """Make ``google.auth`` and ``google.oauth2.service_account`` patchable.
 
     CI's engine pytest process does not install per-node requirements, so
     google-auth is often missing. ``ROCKETRIDE_MOCK`` also ships ``google.oauth2``
     without ``google.auth``, so ``import google.auth`` fails even when oauth2
     is present.
+
+    Only stub modules that cannot be imported. Do not replace a real
+    ``google.auth`` that is installed but not yet loaded, and do not touch
+    native modules such as ``google.protobuf`` (unloading those crashes
+    Windows workers).
     """
     added: list[str] = []
+    attrs: list[tuple[Any, str, Any]] = []
+
+    def _set_attr(parent: Any, name: str, value: Any) -> None:
+        attrs.append((parent, name, getattr(parent, name, _MISSING)))
+        setattr(parent, name, value)
+
     google = sys.modules.get('google')
     if google is None:
-        google = types.ModuleType('google')
-        google.__path__ = []  # namespace package
-        sys.modules['google'] = google
-        added.append('google')
+        if _cannot_import('google'):
+            google = types.ModuleType('google')
+            google.__path__ = []  # namespace package
+            sys.modules['google'] = google
+            added.append('google')
+        else:
+            google = importlib.import_module('google')
 
-    if 'google.auth' not in sys.modules:
+    if google is not None and _cannot_import('google.auth'):
         auth = types.ModuleType('google.auth')
         auth.default = MagicMock(side_effect=Exception('Failed to find ADC'))
         sys.modules['google.auth'] = auth
-        google.auth = auth
         added.append('google.auth')
+        _set_attr(google, 'auth', auth)
 
-    if 'google.oauth2' not in sys.modules:
+    if google is not None and _cannot_import('google.oauth2'):
         oauth2 = types.ModuleType('google.oauth2')
         oauth2.__path__ = []
         sys.modules['google.oauth2'] = oauth2
-        google.oauth2 = oauth2
         added.append('google.oauth2')
+        _set_attr(google, 'oauth2', oauth2)
 
-    oauth2 = sys.modules['google.oauth2']
-    if 'google.oauth2.service_account' not in sys.modules:
+    oauth2 = sys.modules.get('google.oauth2')
+    if oauth2 is not None and _cannot_import('google.oauth2.service_account'):
         sa = types.ModuleType('google.oauth2.service_account')
 
         class Credentials:
@@ -69,18 +101,26 @@ def _install_google_auth_stubs() -> list[str]:
 
         sa.Credentials = Credentials
         sys.modules['google.oauth2.service_account'] = sa
-        oauth2.service_account = sa
         added.append('google.oauth2.service_account')
+        _set_attr(oauth2, 'service_account', sa)
 
-    return added
+    return added, attrs
 
 
 @pytest.fixture(autouse=True)
 def _google_auth_stubs():
-    added = _install_google_auth_stubs()
+    added, attrs = _install_google_auth_stubs()
     try:
         yield
     finally:
+        for parent, name, previous in reversed(attrs):
+            if previous is _MISSING:
+                try:
+                    delattr(parent, name)
+                except AttributeError:
+                    pass
+            else:
+                setattr(parent, name, previous)
         for name in reversed(added):
             sys.modules.pop(name, None)
 
@@ -209,18 +249,19 @@ def test_get_gcp_credentials_unknown_auth_type():
 def test_config_errors_do_not_require_google_auth():
     """Cheap config errors must not depend on google-auth being importable.
 
-    CI pytest does not install per-node requirements, and ROCKETRIDE_MOCK's
-    google package has oauth2 but no auth submodule.
+    Mark only the google-auth import targets as missing. Do not unload
+    ``google.protobuf`` / ``google.cloud`` — popping those native modules
+    crashes Windows pytest workers.
     """
-    saved = {
-        name: sys.modules.pop(name) for name in list(sys.modules) if name == 'google' or name.startswith('google.')
+    blocked = {
+        'google.auth': None,
+        'google.oauth2': None,
+        'google.oauth2.service_account': None,
     }
-    try:
+    with patch.dict(sys.modules, blocked, clear=False):
         with pytest.raises(GCPAuthError, match='Unknown authType'):
             get_gcp_credentials({'authType': 'bogus'})
         with pytest.raises(GCPAuthError, match='Service Account JSON key is required'):
             get_gcp_credentials({'authType': 'service_account'})
         with pytest.raises(GCPAuthError, match='Failed to parse Service Account JSON key'):
             get_gcp_credentials({'authType': 'service_account', 'serviceAccountKey': 'not-a-json'})
-    finally:
-        sys.modules.update(saved)

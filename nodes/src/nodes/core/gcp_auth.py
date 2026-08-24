@@ -14,6 +14,10 @@ class GCPAuthError(Exception):
     pass
 
 
+def _missing_google_auth() -> GCPAuthError:
+    return GCPAuthError("google-auth library is not installed. Ensure node requirements include 'google-auth'.")
+
+
 def get_gcp_credentials(config: dict, scopes: Optional[list[str]] = None) -> Tuple[Any, Optional[str]]:
     """
     Resolves GCP credentials from the given node configuration.
@@ -24,12 +28,6 @@ def get_gcp_credentials(config: dict, scopes: Optional[list[str]] = None) -> Tup
     Raises:
         GCPAuthError: If configuration is invalid or missing.
     """
-    try:
-        import google.auth
-        from google.oauth2 import service_account
-    except ImportError:
-        raise GCPAuthError("google-auth library is not installed. Ensure node requirements include 'google-auth'.")
-
     resolved_scopes = list(scopes) if scopes else list(_DEFAULT_SCOPES)
     auth_type = config.get('authType', 'adc')
     project_id = config.get('projectId')
@@ -52,6 +50,11 @@ def get_gcp_credentials(config: dict, scopes: Optional[list[str]] = None) -> Tup
             raise GCPAuthError(f'Failed to parse Service Account JSON key: {e}')
 
         try:
+            from google.oauth2 import service_account
+        except ImportError:
+            raise _missing_google_auth()
+
+        try:
             creds = service_account.Credentials.from_service_account_info(key_info)
             creds = creds.with_scopes(resolved_scopes)
         except Exception as e:
@@ -63,7 +66,10 @@ def get_gcp_credentials(config: dict, scopes: Optional[list[str]] = None) -> Tup
         return creds, project_id
 
     elif auth_type == 'adc':
-        # Application Default Credentials
+        try:
+            import google.auth
+        except ImportError:
+            raise _missing_google_auth()
         try:
             creds, default_project_id = google.auth.default(scopes=resolved_scopes)
             if not project_id:

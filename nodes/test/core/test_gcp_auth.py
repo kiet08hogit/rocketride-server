@@ -9,6 +9,7 @@ Pure logic, no server or live API needed:
 from __future__ import annotations
 
 import sys
+import types
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -18,6 +19,70 @@ import pytest
 # not on pytest's pythonpath, so import the module by adding its dir to sys.path.
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / 'src' / 'nodes' / 'core'))
 from gcp_auth import GCPAuthError, _DEFAULT_SCOPES, get_gcp_credentials  # noqa: E402
+
+
+def _install_google_auth_stubs() -> list[str]:
+    """Make ``google.auth`` and ``google.oauth2.service_account`` patchable.
+
+    CI's engine pytest process does not install per-node requirements, so
+    google-auth is often missing. ``ROCKETRIDE_MOCK`` also ships ``google.oauth2``
+    without ``google.auth``, so ``import google.auth`` fails even when oauth2
+    is present.
+    """
+    added: list[str] = []
+    google = sys.modules.get('google')
+    if google is None:
+        google = types.ModuleType('google')
+        google.__path__ = []  # namespace package
+        sys.modules['google'] = google
+        added.append('google')
+
+    if 'google.auth' not in sys.modules:
+        auth = types.ModuleType('google.auth')
+        auth.default = MagicMock(side_effect=Exception('Failed to find ADC'))
+        sys.modules['google.auth'] = auth
+        google.auth = auth
+        added.append('google.auth')
+
+    if 'google.oauth2' not in sys.modules:
+        oauth2 = types.ModuleType('google.oauth2')
+        oauth2.__path__ = []
+        sys.modules['google.oauth2'] = oauth2
+        google.oauth2 = oauth2
+        added.append('google.oauth2')
+
+    oauth2 = sys.modules['google.oauth2']
+    if 'google.oauth2.service_account' not in sys.modules:
+        sa = types.ModuleType('google.oauth2.service_account')
+
+        class Credentials:
+            def __init__(self, info=None, scopes=None):
+                self.info = info
+                self.scopes = scopes
+
+            @classmethod
+            def from_service_account_info(cls, info, scopes=None, **kwargs):
+                return cls(info=info, scopes=scopes)
+
+            def with_scopes(self, scopes):
+                return Credentials(info=self.info, scopes=scopes)
+
+        sa.Credentials = Credentials
+        sys.modules['google.oauth2.service_account'] = sa
+        oauth2.service_account = sa
+        added.append('google.oauth2.service_account')
+
+    return added
+
+
+@pytest.fixture(autouse=True)
+def _google_auth_stubs():
+    added = _install_google_auth_stubs()
+    try:
+        yield
+    finally:
+        for name in reversed(added):
+            sys.modules.pop(name, None)
 
 
 def test_get_gcp_credentials_adc_success():
@@ -139,3 +204,23 @@ def test_get_gcp_credentials_unknown_auth_type():
     config = {'authType': 'bogus'}
     with pytest.raises(GCPAuthError, match='Unknown authType'):
         get_gcp_credentials(config)
+
+
+def test_config_errors_do_not_require_google_auth():
+    """Cheap config errors must not depend on google-auth being importable.
+
+    CI pytest does not install per-node requirements, and ROCKETRIDE_MOCK's
+    google package has oauth2 but no auth submodule.
+    """
+    saved = {
+        name: sys.modules.pop(name) for name in list(sys.modules) if name == 'google' or name.startswith('google.')
+    }
+    try:
+        with pytest.raises(GCPAuthError, match='Unknown authType'):
+            get_gcp_credentials({'authType': 'bogus'})
+        with pytest.raises(GCPAuthError, match='Service Account JSON key is required'):
+            get_gcp_credentials({'authType': 'service_account'})
+        with pytest.raises(GCPAuthError, match='Failed to parse Service Account JSON key'):
+            get_gcp_credentials({'authType': 'service_account', 'serviceAccountKey': 'not-a-json'})
+    finally:
+        sys.modules.update(saved)

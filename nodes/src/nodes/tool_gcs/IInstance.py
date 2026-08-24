@@ -1,8 +1,12 @@
-from ai.common.tool import tool_function
-from rocketlib import IInstanceBase
-from typing import List, Dict, Any
-import tempfile
+from __future__ import annotations
+
 import os
+import tempfile
+from typing import Any
+
+from rocketlib import IInstanceBase, tool_function
+
+from .IGlobal import IGlobal
 
 
 def join_gcs_prefix(node_prefix: str, extra: str = '') -> str:
@@ -19,8 +23,14 @@ def join_gcs_prefix(node_prefix: str, extra: str = '') -> str:
     return full_prefix
 
 
+def _as_dict(args: Any) -> dict:
+    return args if isinstance(args, dict) else {}
+
+
 class IInstance(IInstanceBase):
     """GCS instance, providing tool functions for reading and listing files."""
+
+    IGlobal: IGlobal
 
     @tool_function(
         description=(
@@ -30,18 +40,30 @@ class IInstance(IInstanceBase):
             'removed when the node shuts down (endGlobal). Objects larger than the configured '
             'maxDownloadBytes are rejected.'
         ),
-        args={'file_name': 'The name/path of the file in the bucket to download.'},
+        input_schema={
+            'type': 'object',
+            'required': ['file_name'],
+            'properties': {
+                'file_name': {
+                    'type': 'string',
+                    'description': 'The name/path of the file in the bucket to download.',
+                },
+            },
+        },
     )
-    def download_file(self, file_name: str) -> Dict[str, Any]:
-        client = self.glb.client
+    def download_file(self, args: dict | None = None) -> dict[str, Any]:
+        args = _as_dict(args)
+        file_name = str(args.get('file_name') or '')
+
+        client = self.IGlobal.client
         if not client:
             return {'error': 'GCS client is not connected.'}
 
-        bucket_name = self.glb.bucket_name
+        bucket_name = self.IGlobal.bucket_name
         if not bucket_name:
             return {'error': 'Bucket name not configured.'}
 
-        file_name = join_gcs_prefix(self.glb.prefix, file_name)
+        file_name = join_gcs_prefix(self.IGlobal.prefix, file_name)
 
         temp_path = None
         try:
@@ -49,7 +71,7 @@ class IInstance(IInstanceBase):
             blob = bucket.blob(file_name)
             blob.reload()
             size = blob.size or 0
-            max_bytes = self.glb.max_download_bytes
+            max_bytes = self.IGlobal.max_download_bytes
             if size > max_bytes:
                 return {
                     'error': (
@@ -74,7 +96,7 @@ class IInstance(IInstanceBase):
                     )
                 }
 
-            self.glb.retain_temp_file(temp_path)
+            self.IGlobal.retain_temp_file(temp_path)
             return {'success': True, 'local_path': temp_path, 'size': actual_size}
         except Exception as e:
             if temp_path and os.path.exists(temp_path):
@@ -83,21 +105,34 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         description='List files in the configured Google Cloud Storage bucket.',
-        args={
-            'prefix': 'Optional prefix to filter files.',
-            'max_results': 'Maximum number of files to return (default 10).',
+        input_schema={
+            'type': 'object',
+            'properties': {
+                'prefix': {'type': 'string', 'description': 'Optional prefix to filter files.'},
+                'max_results': {
+                    'type': 'integer',
+                    'description': 'Maximum number of files to return (default 10).',
+                },
+            },
         },
     )
-    def list_files(self, prefix: str = '', max_results: int = 10) -> List[str]:
-        client = self.glb.client
+    def list_files(self, args: dict | None = None) -> list[str]:
+        args = _as_dict(args)
+        prefix = str(args.get('prefix') or '')
+        try:
+            max_results = int(args.get('max_results') or 10)
+        except (TypeError, ValueError):
+            max_results = 10
+
+        client = self.IGlobal.client
         if not client:
             return ['Error: GCS client is not connected.']
 
-        bucket_name = self.glb.bucket_name
+        bucket_name = self.IGlobal.bucket_name
         if not bucket_name:
             return ['Error: Bucket name not configured.']
 
-        full_prefix = join_gcs_prefix(self.glb.prefix, prefix)
+        full_prefix = join_gcs_prefix(self.IGlobal.prefix, prefix)
 
         try:
             bucket = client.bucket(bucket_name)

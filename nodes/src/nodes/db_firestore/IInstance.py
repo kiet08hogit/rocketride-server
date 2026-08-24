@@ -1,26 +1,51 @@
-from ai.common.tool import tool_function
-from rocketlib import IInstanceBase
-from typing import Dict, Any
+from __future__ import annotations
+
+from typing import Any
+
+from rocketlib import IInstanceBase, tool_function
+
+from .IGlobal import IGlobal
+
+
+def _as_dict(args: Any) -> dict:
+    return args if isinstance(args, dict) else {}
 
 
 class IInstance(IInstanceBase):
     """Firestore instance, providing tool functions for reading and writing documents."""
 
+    IGlobal: IGlobal
+
     @tool_function(
         description='Insert or update a document in a Firestore collection. If the document exists, it merges the data.',
-        args={
-            'collection': 'The collection name.',
-            'document_id': 'The ID of the document to set. If empty, a new ID will be generated.',
-            'data': 'The JSON dictionary to store in the document.',
+        input_schema={
+            'type': 'object',
+            'required': ['data'],
+            'properties': {
+                'collection': {'type': 'string', 'description': 'The collection name.'},
+                'document_id': {
+                    'type': 'string',
+                    'description': 'The ID of the document to set. If empty, a new ID will be generated.',
+                },
+                'data': {
+                    'type': 'object',
+                    'description': 'The JSON dictionary to store in the document.',
+                },
+            },
         },
     )
-    def set_document(self, collection: str, document_id: str, data: Dict[str, Any]) -> str:
-        client = self.glb.client
+    def set_document(self, args: dict | None = None) -> str:
+        args = _as_dict(args)
+        collection = str(args.get('collection') or '')
+        document_id = str(args.get('document_id') or '')
+        data = args.get('data') if isinstance(args.get('data'), dict) else {}
+
+        client = self.IGlobal.client
         if not client:
             return 'Error: Firestore client is not connected.'
 
         if not collection:
-            collection = self.glb.collection
+            collection = self.IGlobal.collection
 
         try:
             coll_ref = client.collection(collection)
@@ -36,15 +61,26 @@ class IInstance(IInstanceBase):
 
     @tool_function(
         description='Get a single document from a Firestore collection.',
-        args={'collection': 'The collection name.', 'document_id': 'The document ID.'},
+        input_schema={
+            'type': 'object',
+            'required': ['document_id'],
+            'properties': {
+                'collection': {'type': 'string', 'description': 'The collection name.'},
+                'document_id': {'type': 'string', 'description': 'The document ID.'},
+            },
+        },
     )
-    def get_document(self, collection: str, document_id: str) -> Dict[str, Any]:
-        client = self.glb.client
+    def get_document(self, args: dict | None = None) -> dict[str, Any]:
+        args = _as_dict(args)
+        collection = str(args.get('collection') or '')
+        document_id = str(args.get('document_id') or '')
+
+        client = self.IGlobal.client
         if not client:
             return {'error': 'Firestore client is not connected.'}
 
         if not collection:
-            collection = self.glb.collection
+            collection = self.IGlobal.collection
 
         try:
             doc = client.collection(collection).document(document_id).get()

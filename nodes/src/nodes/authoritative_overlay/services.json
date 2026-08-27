@@ -12,9 +12,9 @@
 	"path": "nodes.authoritative_overlay",
 	"prefix": "authoritative_overlay",
 	"description": [
-		"Cross-checks extracted financial numbers against official regulator data ",
-		"(US SEC, EU/UK IFRS, UK Companies House, Japan EDINET). ",
-		"Abstains (drops) the answer if there is no match."
+		"Cross-checks extracted financial numbers against the US SEC EDGAR ",
+		"company-concept API for a configured CIK, scoped to a filing period ",
+		"(form / fy / fp / end). Abstains (drops) the answer if there is no match."
 	],
 	"icon": "util-guard.svg",
 	"lanes": {
@@ -95,7 +95,7 @@
 			],
 			"cases": [
 				{
-					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$74,362,000,000\"}",
+					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$69,860,000,000\", \"form\": \"10-K\", \"fy\": 2025}",
 					"expect": {
 						"answers": {
 							"notEmpty": true
@@ -103,7 +103,7 @@
 					}
 				},
 				{
-					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$999,000\"}",
+					"text": "{\"concept\": \"AccountsPayableCurrent\", \"value\": \"$999,000\", \"form\": \"10-K\", \"fy\": 2025}",
 					"expect": {
 						"answers": {
 							"notEmpty": false

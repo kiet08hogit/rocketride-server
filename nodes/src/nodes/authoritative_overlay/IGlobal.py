@@ -21,18 +21,22 @@
 # SOFTWARE.
 # =============================================================================
 
-from rocketlib import IGlobalBase, debug, warning
+from rocketlib import IGlobalBase, debug
 from ai.common.config import Config
-import json
+
 
 class IGlobal(IGlobalBase):
     def __init__(self):
         super().__init__()
         self.regulator_type = 'sec'
+        self.cik = ''
 
     def beginGlobal(self):
         """Initialize the global authoritative overlay configuration."""
         raw = Config.getNodeConfig(self.glb.logicalType, self.glb.connConfig) or {}
         self.regulator_type = str(raw.get('regulator_type', 'sec')).strip()
-        self.cik = str(raw.get('cik', '')).strip().zfill(10)
+        cik_raw = str(raw.get('cik', '')).strip()
+        # Zero-pad only after the emptiness check so a blank CIK stays falsy
+        # (zfill(10) on '' would become '0000000000' and skip query_sec's guard).
+        self.cik = cik_raw.zfill(10) if cik_raw else ''
         debug(f'Initialized Authoritative Overlay with regulator: {self.regulator_type}, CIK: {self.cik}')

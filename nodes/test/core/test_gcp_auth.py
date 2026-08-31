@@ -25,6 +25,17 @@ from gcp_auth import GCPAuthError, _DEFAULT_SCOPES, get_gcp_credentials  # noqa:
 
 _MISSING = object()
 
+# Slots that this file may load (real SDK or stub). Snapshot all four whether
+# or not the helper added them — a real google-auth install is imported in
+# place and must still be restored so later suites can resolve
+# nodes/test/mocks/google (see tool_google_workspace gmail mock SDK tests).
+_GOOGLE_AUTH_MODULES = (
+    'google',
+    'google.auth',
+    'google.oauth2',
+    'google.oauth2.service_account',
+)
+
 
 def _cannot_import(name: str) -> bool:
     """True when ``name`` is not already loaded and cannot be found on disk.
@@ -109,20 +120,50 @@ def _install_google_auth_stubs() -> tuple[list[str], list[tuple[Any, str, Any]]]
 
 @pytest.fixture(autouse=True)
 def _google_auth_stubs():
-    added, attrs = _install_google_auth_stubs()
-    try:
-        yield
-    finally:
-        for parent, name, previous in reversed(attrs):
-            if previous is _MISSING:
-                try:
-                    delattr(parent, name)
-                except AttributeError:
-                    pass
-            else:
-                setattr(parent, name, previous)
-        for name in reversed(added):
-            sys.modules.pop(name, None)
+    """Install stubs when google-auth is missing; restore ``sys.modules`` after.
+
+    ``_install_google_auth_stubs`` only records names it *adds*. On a machine
+    where google-auth is installed it imports the real modules instead, and a
+    teardown that pops only ``added`` leaves them (and ``google.auth.*`` /
+    ``google.oauth2.*`` children) resident. That displaces
+    ``nodes/test/mocks/google`` for later suites, and leftover children
+    reconstruct a ``google`` namespace without ``auth``.
+
+    ``patch.dict(sys.modules, ..., clear=False)`` snapshots the whole mapping
+    and restores it, including those children. Already-loaded
+    ``google.protobuf`` stays in the snapshot — unloading it crashes Windows
+    workers. The four names are passed explicitly so a pre-existing real or
+    mock entry is restored even if this helper never added it.
+    """
+    saved = {name: sys.modules[name] for name in _GOOGLE_AUTH_MODULES if name in sys.modules}
+    with patch.dict(sys.modules, saved, clear=False):
+        added, attrs = _install_google_auth_stubs()
+        try:
+            yield
+        finally:
+            for parent, name, previous in reversed(attrs):
+                if previous is _MISSING:
+                    try:
+                        delattr(parent, name)
+                    except AttributeError:
+                        pass
+                else:
+                    setattr(parent, name, previous)
+            for name in reversed(added):
+                sys.modules.pop(name, None)
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _google_auth_modules_restored_after_file():
+    """Fail this file if any test leaves a real google-auth import behind."""
+    before = {name: sys.modules.get(name, _MISSING) for name in _GOOGLE_AUTH_MODULES}
+    yield
+    after = {name: sys.modules.get(name, _MISSING) for name in _GOOGLE_AUTH_MODULES}
+    leaked = [name for name in _GOOGLE_AUTH_MODULES if after[name] is not before[name]]
+    assert not leaked, (
+        f'test_gcp_auth left google-auth modules resident {leaked}; '
+        'sibling suites (tool_google_workspace) expect nodes/test/mocks/google'
+    )
 
 
 def test_get_gcp_credentials_adc_success():

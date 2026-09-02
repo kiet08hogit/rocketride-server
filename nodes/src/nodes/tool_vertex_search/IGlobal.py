@@ -20,6 +20,7 @@ class IGlobal(IGlobalBase):
     project_id: str = ''
 
     def beginGlobal(self) -> None:
+        """Connect to the configured Vertex Matching Engine index endpoint."""
         if self.IEndpoint.endpoint.openMode == OPEN_MODE.CONFIG:
             return
 
@@ -54,12 +55,19 @@ class IGlobal(IGlobalBase):
                 location=self.location,
                 credentials=creds,
             )
+            deployed = list(getattr(self.index_endpoint, 'deployed_indexes', None) or [])
+            deployed_ids = {str(getattr(idx, 'id', '') or '') for idx in deployed}
+            if self.deployed_index_id not in deployed_ids:
+                raise ValueError(
+                    f'deployedIndexId {self.deployed_index_id!r} is not deployed on index endpoint {index_endpoint_id}.'
+                )
             debug(f'tool_vertex_search: connected to index endpoint {index_endpoint_id}')
         except Exception as e:
             warning(f'Vertex AI connection check failed: {e}')
             raise
 
     def validateConfig(self) -> None:
+        """Warn on missing auth or required Vertex index settings."""
         # deferred: engine-path import
         from nodes.core.gcp_auth import get_gcp_credentials, GCPAuthError
 
@@ -76,4 +84,5 @@ class IGlobal(IGlobalBase):
             warning(str(e))
 
     def endGlobal(self) -> None:
+        """Drop the index endpoint handle."""
         self.index_endpoint = None

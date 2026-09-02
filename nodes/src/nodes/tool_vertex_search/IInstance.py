@@ -47,6 +47,16 @@ class IInstance(IInstanceBase):
         },
     )
     def search(self, args: dict | None = None) -> list[dict[str, Any]]:
+        """Return nearest neighbors for ``query_vector``.
+
+        Args:
+            args: Tool arguments with ``query_vector``, optional ``top_k``,
+                and optional ``score_threshold``.
+
+        Returns:
+            A list of ``{id, distance}`` dicts, or a one-item list with
+            ``error`` when the endpoint is disconnected or the search fails.
+        """
         args = _as_dict(args)
         query_vector = args.get('query_vector') or []
         try:

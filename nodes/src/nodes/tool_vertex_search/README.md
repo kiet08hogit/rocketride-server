@@ -7,6 +7,7 @@ This node exposes a `search` tool only. It is not a full vector store adapter (n
 ## Authentication
 
 This node uses the shared RocketRide Google Cloud authentication logic. You can authenticate by either:
+
 1. Uploading a **Service Account JSON Key**.
 2. Leaving the key blank and relying on **Application Default Credentials (ADC)** if your RocketRide server is hosted on Google Cloud Run, GKE, or a Compute Engine VM with attached service accounts.
 

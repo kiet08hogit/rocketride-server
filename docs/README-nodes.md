@@ -174,6 +174,7 @@ channel; they have no data lanes and **bind to an agent** (see
 | `tool_gohighlevel`  | GoHighLevel (LeadConnector) v2 sub-account operations: contacts, opportunities, conversations, calendars |
 | `tool_gcs`          | Google Cloud Storage: list objects and download files            |
 | `tool_vertex_search`| Vertex AI Vector Search nearest-neighbor lookup                  |
+| `tool_crustdata`    | Crustdata company/people search: firmographics, funding, headcount, verified profiles |
 | `tool_notion`       | Notion workspace access: search, read pages and database rows, create/update content |
 
 ### Embeddings

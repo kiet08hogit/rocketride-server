@@ -63,6 +63,7 @@ class Player(AudioReader):
         self._chunk_accumulator = bytearray()
         self._play_callback_buffer = bytearray()
         self._stream = None
+        self._wrote_any_data = False
 
         super().__init__(
             name='player',
@@ -160,6 +161,10 @@ class Player(AudioReader):
         # Save the new buffer
         self._play_callback_buffer = buf
 
+    def write(self, buffer: bytes):
+        self._wrote_any_data = True
+        super().write(buffer)
+
     def start(self):
         """
         Start the audio playback stream and the data extractor.
@@ -170,6 +175,7 @@ class Player(AudioReader):
         self._chunk_accumulator = bytearray()
         self._play_callback_buffer = bytearray()
         self._playback_finished = False
+        self._wrote_any_data = False
 
         # Check for valid output audio hardware
         try:
@@ -205,29 +211,39 @@ class Player(AudioReader):
         # Stop parent processing
         super().stop()
 
-        # `_playback_finished` flips only after the callback consumes the
-        # trailing sentinel, which also drains everything queued ahead of it.
-        # Do not also wait on `_play_queue.empty()`: a leftover sentinel from
-        # stop() is never consumed once the callback has finished, and that
-        # check would stall until STOP_TIMEOUT on every normal EOF.
-        start_wait_time = time.monotonic()
-        sentinel_sent = False
-        while len(self._play_callback_buffer) > 0 or not self._playback_finished:
-            if not sentinel_sent:
-                try:
-                    self._play_queue.put_nowait(None)
-                    sentinel_sent = True
-                except queue.Full:
-                    pass
+        timed_out = False
 
-            if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
-                warning('audio_player: stop timed out, forcing stream stop')
-                break
-            time.sleep(0.1)  # Wait 100ms
+        # Nothing was ever written, so nothing will ever set _playback_finished
+        # (only onData, driven by the ffmpeg thread WRITE starts, does that) -
+        # waiting here would hang forever on an empty stream.
+        if self._wrote_any_data:
+            # `_playback_finished` flips only after the callback consumes the
+            # trailing sentinel, which also drains everything queued ahead of it.
+            # Do not also wait on `_play_queue.empty()`: stop() enqueues its own
+            # sentinel below, and a leftover one is never consumed once the
+            # callback has finished, so that check would stall until STOP_TIMEOUT
+            # on every normal EOF.
+            start_wait_time = time.monotonic()
+            sentinel_sent = False
+            while len(self._play_callback_buffer) > 0 or not self._playback_finished:
+                if not sentinel_sent:
+                    try:
+                        self._play_queue.put_nowait(None)
+                        sentinel_sent = True
+                    except queue.Full:
+                        pass
+
+                if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
+                    warning('audio_player: stop timed out, forcing stream stop')
+                    timed_out = True
+                    break
+                time.sleep(0.1)  # Wait 100ms
 
         # Stop the audio stream if it exists
         if self._stream:
-            if time.monotonic() - start_wait_time > self.STOP_TIMEOUT:
+            # A timed-out wait leaves the callback live, so abort() drops what is
+            # still queued instead of blocking on it the way stop() would.
+            if timed_out:
                 self._stream.abort()
             else:
                 self._stream.stop()

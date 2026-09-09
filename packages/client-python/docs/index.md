@@ -486,7 +486,27 @@ DAPException                    # Base DAP protocol error (has dap_result dict)
     └── ValidationException     # Invalid input/config
 ```
 
-All exceptions expose a `dap_result` dict with detailed server error context.
+All exceptions expose a `dap_result` dict with detailed server error context,
+plus `code` and `hint`:
+
+- `code` is the server's machine-readable classification, or `None`. Task
+  failures carry one: `TASK_NOT_REGISTERED` (the token names no live task —
+  never started, terminated, replaced, or the engine restarted),
+  `TASK_AMBIGUOUS`, `TASK_COMPLETED`, `TASK_STOPPED`. **Classify on `code`, not
+  on the message text**, which is written for people and may be reworded.
+- `hint` is troubleshooting text the SDK attached for a developer, or `None`.
+  It is kept out of `str(e)` so an application can show the message to an end
+  user without the developer checklist.
+
+```python
+except PipeException as e:
+    if e.code == 'TASK_NOT_REGISTERED':
+        await restart_pipeline()      # the task is gone; start a new one
+    else:
+        print(e)                      # safe to show
+        if e.hint:
+            log.debug(e.hint)         # developer detail
+```
 
 `AuthenticationException` is thrown on DAP auth failure. In persist mode the client catches it, calls `on_connect_error`, and does not retry so the app can fix credentials and call `connect()` again.
 
@@ -699,14 +719,17 @@ asyncio.run(main())
 The `rocketride` command is installed automatically with the package.
 
 ```bash
+rocketride validate ./pipelines/*.pipe       # Validate .pipe files without running them
 rocketride start pipeline.json              # Start a pipeline
 rocketride upload *.pdf --token <token>      # Upload files to a running pipeline
 rocketride status --token <token>            # Monitor task progress
 rocketride stop --token <token>              # Terminate a running task
 rocketride list                              # List all active tasks
 rocketride events ALL --token <token>        # Stream task events
-rocketride rrext_store get_all_projects      # List stored projects
+rocketride store dir /                       # List the root of the file store
 ```
+
+The `store` command's sub-commands are `dir`, `type`, `write`, `rm`, `mkdir`, and `stat` — run `rocketride store --help` for details.
 
 All commands accept `--uri` and `--apikey` flags, or read from environment variables.
 

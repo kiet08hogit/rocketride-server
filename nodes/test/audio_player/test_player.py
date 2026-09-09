@@ -160,7 +160,9 @@ def test_stop_normal(player_instance):
     """Test stop() normal behavior with no hangs."""
     stream = MagicMock()
     player_instance._stream = stream
-    # Simulate normal playback finished state
+    # Data was written, so stop() takes the drain path rather than the
+    # _wrote_any_data short-circuit; playback is already finished, so it exits at once.
+    player_instance._wrote_any_data = True
     player_instance._playback_finished = True
 
     with patch.object(player_mod.AudioReader, 'stop') as mock_super_stop:
@@ -180,7 +182,8 @@ def test_stop_timeout(mock_monotonic, mock_sleep, mock_warning, player_instance)
     """Test stop() times out and aborts stream if callback hangs."""
     stream = MagicMock()
     player_instance._stream = stream
-    # Simulate hang (playback finished never set)
+    # Simulate hang (playback finished never set) on the drain path
+    player_instance._wrote_any_data = True
     player_instance._playback_finished = False
 
     mock_monotonic.side_effect = _advancing_clock()
@@ -206,6 +209,7 @@ def test_start_after_stop_timeout_plays_audio(
     """A timed-out stop() must not leave a stale sentinel that mutes the next stream."""
     stream = MagicMock()
     player_instance._stream = stream
+    player_instance._wrote_any_data = True
     player_instance._playback_finished = False
     mock_monotonic.side_effect = _advancing_clock()
 
@@ -227,3 +231,25 @@ def test_start_after_stop_timeout_plays_audio(
     assert player_instance._playback_finished is False
     assert player_instance._play_queue.empty()
     assert len(player_instance._play_callback_buffer) == required_bytes
+
+
+@patch('time.sleep', return_value=None)
+def test_stop_without_written_data_skips_the_wait_and_does_not_abort(mock_sleep, player_instance):
+    """An empty stream must tear down promptly and still use stop(), not abort().
+
+    `_wrote_any_data` is False, so the drain loop never runs. The stream teardown
+    below must therefore not depend on anything the loop defines, and must not
+    mistake a skipped wait for a timed-out one.
+    """
+    stream = MagicMock()
+    player_instance._stream = stream
+    player_instance._playback_finished = False
+
+    with patch.object(player_mod.AudioReader, 'stop'):
+        player_instance.stop()
+
+    mock_sleep.assert_not_called()
+    stream.stop.assert_called_once()
+    stream.abort.assert_not_called()
+    stream.close.assert_called_once()
+    assert player_instance._stream is None

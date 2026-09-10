@@ -253,3 +253,41 @@ def test_stop_without_written_data_skips_the_wait_and_does_not_abort(mock_sleep,
     stream.abort.assert_not_called()
     stream.close.assert_called_once()
     assert player_instance._stream is None
+
+
+@patch.object(player_mod, 'warning')
+@patch('time.sleep', return_value=None)
+@patch('time.monotonic')
+def test_second_stop_after_a_timed_out_stop_does_not_wait_again(
+    mock_monotonic, mock_sleep, mock_warning, player_instance
+):
+    """A repeat stop() after a timed-out one must not burn STOP_TIMEOUT a second time.
+
+    The first stop() times out, so it leaves _playback_finished False and a
+    non-empty _play_callback_buffer behind, and sets _stream to None. Nothing is
+    draining the queue any more, so a second stop() can only wait out the full
+    timeout again - writeAVI reaches stop() on a duplicate END.
+    """
+    stream = MagicMock()
+    player_instance._stream = stream
+    player_instance._wrote_any_data = True
+    player_instance._playback_finished = False
+    player_instance._play_callback_buffer = bytearray(b'\x00\x00')
+    # One second per read, so the loop really iterates and sleeps before the
+    # deadline trips. The default step jumps past STOP_TIMEOUT on the first
+    # check, which would exit without sleeping and hide what we assert here.
+    mock_monotonic.side_effect = _advancing_clock(step=1.0)
+
+    with patch.object(player_mod.AudioReader, 'stop'):
+        player_instance.stop()
+    stream.abort.assert_called_once()
+    assert player_instance._stream is None
+
+    sleeps_after_first_stop = mock_sleep.call_count
+    with patch.object(player_mod.AudioReader, 'stop'):
+        player_instance.stop()
+
+    assert mock_sleep.call_count == sleeps_after_first_stop, (
+        'the second stop() waited again - nothing can drain the queue once the '
+        'stream is gone, so that wait can only ever burn STOP_TIMEOUT'
+    )

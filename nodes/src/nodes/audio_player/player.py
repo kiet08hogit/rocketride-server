@@ -211,6 +211,13 @@ class Player(AudioReader):
         # Stop parent processing
         super().stop()
 
+        # Once the stream is gone nothing drains the queue, so _playback_finished
+        # can never flip and waiting below could only burn STOP_TIMEOUT. Reached by
+        # a duplicate END, and by any stop() following a timed-out one, which leaves
+        # a non-empty buffer and _playback_finished False behind it.
+        if self._stream is None:
+            return
+
         timed_out = False
 
         # Nothing was ever written, so nothing will ever set _playback_finished

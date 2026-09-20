@@ -121,7 +121,6 @@ async def test_pipe_validate_preserves_explicit_version(monkeypatch):
     assert captured['payload']['pipeline']['version'] == 3
 
 
-
 @pytest.mark.asyncio
 async def test_pipe_validate_does_not_wrap_single_component_payload(monkeypatch):
     """A {version, component} payload reaches validatePipeline unwrapped.

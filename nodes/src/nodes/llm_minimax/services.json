@@ -106,6 +106,8 @@
 				"modelSource": "provider",
 				"modelTotalTokens": 204800, // sync_models.config.json
 				"modelOutputTokens": 65536, // sync_models.config.json
+				"deprecated": true,
+				"migration": "Model deprecated by OpenRouter (expiration date: 2026-10-08). Please select a current model.",
 				"serverbase": "https://api.minimax.io/v1",
 				"apikey": "",
 				"capabilities": {
@@ -204,7 +206,7 @@
 				"model": "minimax-01",
 				"modelSource": "openrouter",
 				"modelTotalTokens": 1000192, // openrouter
-				"modelOutputTokens": 1000192, // openrouter
+				"modelOutputTokens": 900172, // openrouter
 				"apikey": ""
 			},
 			"minimax-m1": {
@@ -224,6 +226,17 @@
 				"modelSource": "openrouter",
 				"modelTotalTokens": 65536, // openrouter
 				"modelOutputTokens": 2048, // openrouter
+				"apikey": ""
+			},
+			"minimax-m3-batch": {
+				"title": "MiniMax: MiniMax M3 (batch)",
+				"model": "minimax-m3:batch",
+				"modelSource": "openrouter",
+				"modelTotalTokens": 524288, // openrouter
+				"modelOutputTokens": 471859, // openrouter
+				"capabilities": {
+					"reasoning": true
+				},
 				"apikey": ""
 			}
 		}
@@ -426,6 +439,12 @@
 					"properties": [
 						"minimax.minimax-m2-her"
 					]
+				},
+				{
+					"value": "minimax-m3-batch",
+					"properties": [
+						"minimax.minimax-m3-batch"
+					]
 				}
 			]
 		},
@@ -452,6 +471,13 @@
 		},
 		"minimax.minimax-m2-her": {
 			"object": "minimax-m2-her",
+			"properties": [
+				"llm.cloud.apikey",
+				"llm.cloud.modelSource"
+			]
+		},
+		"minimax.minimax-m3-batch": {
+			"object": "minimax-m3-batch",
 			"properties": [
 				"llm.cloud.apikey",
 				"llm.cloud.modelSource"

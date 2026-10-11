@@ -247,6 +247,39 @@ class _FakeResult:
         return types.SimpleNamespace(counters=self._counters)
 
 
+class _FakeTransaction:
+    """Explicit transaction. An exception rolls it back; commit() keeps the write."""
+
+    def __init__(self, session):
+        self._session = session
+        self.committed = False
+        self.rolled_back = False
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if not self.committed and not self.rolled_back:
+            if exc_type is None:
+                self.committed = True
+            else:
+                self.rolled_back = True
+        return False
+
+    def run(self, query, params=None):
+        return self._session.run(query, params)
+
+    def commit(self):
+        if self.rolled_back:
+            raise RuntimeError('commit after rollback')
+        self.committed = True
+
+    def rollback(self):
+        if self.committed:
+            raise RuntimeError('rollback after commit')
+        self.rolled_back = True
+
+
 class _FakeSession:
     def __init__(self, driver):
         self._driver = driver
@@ -263,6 +296,12 @@ class _FakeSession:
             raise self._driver.raise_error
         return self._driver.result
 
+    def begin_transaction(self, timeout=None):
+        self._driver.tx_timeouts.append(timeout)
+        tx = _FakeTransaction(self)
+        self._driver.transactions.append(tx)
+        return tx
+
 
 class _FakeDriver:
     def __init__(self, result=None, raise_error=None):
@@ -270,6 +309,8 @@ class _FakeDriver:
         self.raise_error = raise_error
         self.calls = []
         self.session_kwargs = []
+        self.transactions = []
+        self.tx_timeouts = []
 
     def session(self, **kwargs):
         self.session_kwargs.append(kwargs)
@@ -362,10 +403,44 @@ def test_affected_rows_counted_even_when_write_returns_rows():
 
 
 def test_execute_raw_caps_at_max_execute_rows():
-    glb = _FakeGlobal(_FakeDriver(_FakeResult(records=[{'n': i} for i in range(10)])))
+    driver = _FakeDriver(_FakeResult(records=[{'n': i} for i in range(10)]))
+    glb = _FakeGlobal(driver)
     glb.max_execute_rows = 3
     with pytest.raises(ValueError, match='max_execute_rows'):
         glb._run_query_raw('MATCH (n) RETURN n')
+    # The cap trips before commit, so a retry cannot write the rows again.
+    tx = driver.transactions[-1]
+    assert tx.rolled_back is True
+    assert tx.committed is False
+
+
+def test_execute_raw_commits_when_within_cap():
+    driver = _FakeDriver(_FakeResult(records=[{'n': i} for i in range(3)], counters=_FakeCounters(nodes_created=3)))
+    glb = _FakeGlobal(driver)
+    glb.max_execute_rows = 3
+    out = glb._run_query_raw('CREATE (n:Item) RETURN n', params={'name': 'Ada'})
+    assert len(out['rows']) == 3
+    assert out['affected_rows'] == 3
+    tx = driver.transactions[-1]
+    assert tx.committed is True
+    assert tx.rolled_back is False
+    assert driver.calls[-1] == ('CREATE (n:Item) RETURN n', {'name': 'Ada'})
+    assert driver.tx_timeouts == [glb.QUERY_TIMEOUT]
+
+
+def test_execute_tool_forwards_params():
+    driver = _FakeDriver(
+        _FakeResult(records=[{'name': 'Ada'}], counters=_FakeCounters(nodes_created=1, properties_set=1))
+    )
+    glb = _FakeGlobal(driver)
+    glb.allow_execute = True
+    out = _instance(glb).execute(
+        {'query': 'CREATE (n:Person {name: $name}) RETURN n.name AS name', 'params': {'name': 'Ada'}}
+    )
+    assert out['rows'] == [{'name': 'Ada'}]
+    assert out['affected_rows'] == 2
+    assert driver.calls[-1][1] == {'name': 'Ada'}
+    assert driver.transactions[-1].committed is True
 
 
 # ---------------------------------------------------------------------------

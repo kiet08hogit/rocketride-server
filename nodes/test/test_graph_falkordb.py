@@ -236,9 +236,10 @@ class _FakeResult:
 
 
 class _FakeGraph:
-    def __init__(self, result=None, raise_error=None):
+    def __init__(self, result=None, raise_error=None, explain_plan='plan'):
         self._result = result or _FakeResult()
         self._raise = raise_error
+        self.explain_plan = explain_plan
         self.calls = []
 
     def query(self, q, params=None, timeout=None):
@@ -253,11 +254,11 @@ class _FakeGraph:
             raise self._raise
         return self._result
 
-    def explain(self, q):
-        self.calls.append(('explain', q, None, None))
+    def explain(self, q, params=None):
+        self.calls.append(('explain', q, params, None))
         if self._raise:
             raise self._raise
-        return 'plan'
+        return self.explain_plan
 
 
 class _FakeClient:
@@ -478,12 +479,18 @@ def test_execute_tool_treats_empty_params_as_none(params):
     assert out['affected_rows'] == 1
 
 
-def test_execute_tool_refuses_params_the_driver_cannot_bind():
-    # FalkorDB's _run_query_raw takes no params: refuse rather than drop them.
-    glb = _FakeGlobal(_FakeGraph())
+def test_execute_tool_forwards_params():
+    # graph.query binds $name. The tool must pass the object through, not refuse it.
+    graph = _FakeGraph(_FakeResult(result_set=[['Ada']], header=[[1, 'name']], nodes_created=1, properties_set=1))
+    glb = _FakeGlobal(graph)
     glb.allow_execute = True
-    with pytest.raises(ValueError, match='not supported'):
-        _instance(glb).execute({'query': 'CREATE (n:Person {name: $n})', 'params': {'n': 'Ada'}})
+    out = _instance(glb).execute(
+        {'query': 'CREATE (n:Person {name: $name}) RETURN n.name AS name', 'params': {'name': 'Ada'}}
+    )
+    assert graph.calls[0][0] == 'query'
+    assert graph.calls[0][2] == {'name': 'Ada'}
+    assert out['rows'] == [{'name': 'Ada'}]
+    assert out['affected_rows'] == 2
 
 
 @pytest.mark.parametrize('params', [0, False, '', 'rows', 42])
@@ -520,11 +527,11 @@ def test_execute_tool_accepts_object_row_mode():
     assert out['affected_rows'] == 1
 
 
-def test_execute_schema_lists_params_only_when_supported():
+def test_execute_schema_lists_params_when_the_driver_supports_them():
     glb = _FakeGlobal(_FakeGraph())
-    assert 'params' not in _instance(glb)._execute_input_schema()['properties']
-    glb.supports_execute_params = True
     assert 'params' in _instance(glb)._execute_input_schema()['properties']
+    glb.supports_execute_params = False
+    assert 'params' not in _instance(glb)._execute_input_schema()['properties']
 
 
 def test_execute_tool_refuses_positional_params():
@@ -729,6 +736,95 @@ def test_affected_rows_reported_for_write_that_also_returns_rows():
 
     assert out['rows']  # the RETURN produced a row
     assert out['affected_rows'] == 2  # ...and the write is still counted
+
+
+def test_execute_without_return_is_not_wrapped():
+    graph = _FakeGraph(_FakeResult(result_set=[], header=[], nodes_created=1))
+    glb = _FakeGlobal(graph)
+    glb._run_query_raw('CREATE (n:Person)')
+    assert graph.calls[0][1] == 'CREATE (n:Person)'
+
+
+def test_execute_return_is_wrapped_with_null_safe_collect():
+    graph = _FakeGraph(_FakeResult(result_set=[[1, None]], header=[[1, 'id'], [1, 'name']]))
+    glb = _FakeGlobal(graph)
+    glb.max_execute_rows = 3
+    glb._run_query_raw('UNWIND range(1, 2) AS i CREATE (n:Item {id: i}) RETURN n.id AS id, n.name AS name')
+    sent = graph.calls[0][1]
+    # A list keeps null cells. collect(id) would drop them and under-count.
+    assert 'collect([`id`, `name`])' in sent
+    assert 'LIMIT 4' in sent
+    # WHERE keeps the guard live. An unused column could be planned away, and
+    # the write would then commit before Python could count the rows.
+    assert 'WHERE localtime(_rr_d) IS NOT NULL' in sent
+    assert 'RETURN _rr_row[0] AS `id`, _rr_row[1] AS `name`' in sent
+
+
+def test_execute_cap_error_maps_guard_failure_only():
+    graph = _FakeGraph(raise_error=mod.RedisError('Invalid time string: _rr_execute_cap'))
+    glb = _FakeGlobal(graph)
+    glb.max_execute_rows = 3
+    with pytest.raises(ValueError, match='max_execute_rows=3'):
+        glb._run_query_raw('UNWIND range(1, 5) AS i CREATE (n:Item {id: i}) RETURN n.id AS id')
+    assert 'CALL {' in graph.calls[0][1]
+
+
+def test_execute_user_division_by_zero_stays_a_driver_error():
+    graph = _FakeGraph(raise_error=mod.RedisError('Division by zero'))
+    glb = _FakeGlobal(graph)
+    with pytest.raises(mod.RedisError, match='Division by zero'):
+        glb._run_query_raw('RETURN 10 / $z AS q')
+
+
+def test_execute_user_localtime_error_stays_a_driver_error():
+    graph = _FakeGraph(raise_error=mod.RedisError('Invalid time string: noon'))
+    glb = _FakeGlobal(graph)
+    with pytest.raises(mod.RedisError, match='Invalid time string: noon'):
+        glb._run_query_raw("RETURN localtime('noon') AS t")
+
+
+def test_explain_project_columns_and_return_star():
+    plan = '\n'.join(
+        [
+            'Results',
+            '    Project',
+            '        n',
+            '            Node By Label Scan',
+        ]
+    )
+    assert _glb_mod._columns_from_plan(plan) == ['n']
+    # The Python client stores one space per nesting level, not four.
+    one_space = '\n'.join(['Results', ' Project', '  n.id', '  n.name', '   Node By Label Scan'])
+    assert _glb_mod._columns_from_plan(one_space) == ['n.id', 'n.name']
+    assert _glb_mod._columns_from_plan('plan') == []
+
+    graph = _FakeGraph(
+        _FakeResult(result_set=[['Ada']], header=[[1, 'n']]),
+        explain_plan=plan,
+    )
+    glb = _FakeGlobal(graph)
+    glb._run_query_raw('MATCH (n) RETURN *', params={'name': 'Ada'})
+    assert graph.calls[0][0] == 'explain'
+    assert graph.calls[0][2] == {'name': 'Ada'}
+    assert graph.calls[1][0] == 'query'
+    assert 'collect([`n`])' in graph.calls[1][1]
+    assert graph.calls[1][2] == {'name': 'Ada'}
+
+
+def test_execute_return_star_without_columns_does_not_run():
+    graph = _FakeGraph()
+    glb = _FakeGlobal(graph)
+    with pytest.raises(ValueError, match='RETURN \\*'):
+        glb._run_query_raw('MATCH (n) RETURN *')
+    assert all(call[0] != 'query' for call in graph.calls)
+
+
+def test_execute_unparseable_does_not_run():
+    graph = _FakeGraph()
+    glb = _FakeGlobal(graph)
+    with pytest.raises(ValueError, match='row cap'):
+        glb._run_query_raw('MATCH (n RETURN n')
+    assert graph.calls == []
 
 
 # ---------------------------------------------------------------------------

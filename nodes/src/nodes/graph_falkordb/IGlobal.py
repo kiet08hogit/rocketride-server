@@ -41,6 +41,8 @@ from redis.exceptions import RedisError
 from rocketlib import OPEN_MODE, warning
 
 from ai.common.graph import GraphGlobalBase
+from ai.common.graph.age.analysis import analyze
+from ai.common.graph.age.errors import AgeTranslationError
 from ai.common.utils import config_int, parse_bool
 
 from falkordb import FalkorDB
@@ -63,6 +65,9 @@ SCHEMA_LABEL_LIMIT = 200
 
 class IGlobal(GraphGlobalBase):
     """FalkorDB-specific global connection state."""
+
+    # execute binds $name values; graph.query forwards them as a CYPHER header.
+    supports_execute_params = True
 
     client: Optional[FalkorDB] = None
 
@@ -187,10 +192,23 @@ class IGlobal(GraphGlobalBase):
         result = self.select_graph().ro_query(query, params=params or None, timeout=self.query_timeout_ms)
         return self._rows_as_dicts(result, cap=cap)
 
-    def _run_query_raw(self, query: str) -> Dict[str, Any]:
-        """Execute a raw statement with writes allowed (the EXECUTE path)."""
+    def _run_query_raw(self, query: str, params: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Execute a raw statement with writes allowed (the EXECUTE path).
+
+        A successful ``GRAPH.QUERY`` is already committed when it returns, so an
+        over-limit result has to fail inside that one statement. The wrapper
+        below does that; a failed query rolls the write back.
+
+        ``params`` binds ``$name`` values through the client's CYPHER header.
+        """
         max_rows = self.max_execute_rows
-        result = self.select_graph().query(query, timeout=self.query_timeout_ms)
+        statement = self._capped_execute_statement(query, params, max_rows)
+        try:
+            result = self.select_graph().query(statement, params=params or None, timeout=self.query_timeout_ms)
+        except RedisError as e:
+            if _is_execute_cap_error(e):
+                raise ValueError(f'EXECUTE query exceeded max_execute_rows={max_rows}') from e
+            raise
 
         rows = self._rows_as_dicts(result, cap=max_rows + 1)
         if len(rows) > max_rows:
@@ -200,6 +218,33 @@ class IGlobal(GraphGlobalBase):
         # returns rows (CREATE (n) RETURN n), so `rows` being non-empty does not
         # mean nothing was written. _affected_rows is 0 for a pure read anyway.
         return {'rows': rows, 'affected_rows': _affected_rows(result)}
+
+    def _capped_execute_statement(self, query: str, params: Optional[Dict[str, Any]], max_rows: int) -> str:
+        """Statement to send: unchanged for a pure write, wrapped when it returns rows.
+
+        Raises before ``query()`` when the row cap cannot be applied, so nothing
+        is written.
+        """
+        statement = _strip_statement(query)
+        try:
+            facts = analyze(statement)
+        except AgeTranslationError as e:
+            raise ValueError(f'EXECUTE query was not run because its row cap could not be checked: {e}') from e
+
+        if facts.returns_star:
+            columns = _columns_from_plan(self.select_graph().explain(statement, params=params or None))
+            if not columns:
+                raise ValueError('EXECUTE query was not run because RETURN * columns could not be read from EXPLAIN')
+        elif not facts.return_columns:
+            return statement
+        else:
+            columns = [column.display_name for column in facts.return_columns]
+
+        reserved = _GUARD_NAMES.intersection(columns)
+        if reserved:
+            names = ', '.join(sorted(reserved))
+            raise ValueError(f'EXECUTE query was not run because a result column uses a reserved name ({names})')
+        return _wrap_capped_query(statement, max_rows, columns)
 
     def _validate_query(self, query: str) -> Tuple[bool, str]:
         """Check syntax with EXPLAIN without running the query."""
@@ -432,6 +477,109 @@ def _header_names(header) -> List[str]:
         else:
             names.append(str(entry))
     return names
+
+
+# Names the row-cap wrapper binds. A user column with one of these names would
+# hide the guard, so execute refuses it before running the write.
+_GUARD_NAMES = frozenset({'_rr_rows', '_rr_d', '_rr_row'})
+
+
+def _strip_statement(query: str) -> str:
+    """Drop surrounding space and a trailing semicolon so the text can sit in CALL."""
+    statement = query.strip()
+    while statement.endswith(';'):
+        statement = statement[:-1].rstrip()
+    return statement
+
+
+def _quote_name(name: str) -> str:
+    """Backtick a result column so `n.id` and odd names stay one identifier."""
+    return '`' + name.replace('`', '``') + '`'
+
+
+# localtime() echoes this token. The Python client drops errCtx, so the cap
+# check matches this message and leaves every other server error alone.
+_CAP_ERROR = 'Invalid time string: _rr_execute_cap'
+
+
+def _wrap_capped_query(statement: str, max_rows: int, columns: List[str]) -> str:
+    """One atomic query that errors, and therefore rolls back, when too many rows return.
+
+    ``collect([col, ...])`` keeps null cells. ``collect(col)`` would drop them and
+    under-count. Both CASE branches are plain strings, so eager evaluation cannot
+    fail them. ``localtime`` then rejects only the over-cap token, and the client
+    reports that token. The call sits in WHERE so a planner cannot drop it.
+    """
+    quoted = [_quote_name(name) for name in columns]
+    body = '\n'.join(f'  {line}' if line else '' for line in statement.splitlines())
+    projected = ', '.join(f'_rr_row[{index}] AS {name}' for index, name in enumerate(quoted))
+    return (
+        'CALL {\n'
+        f'{body}\n'
+        '}\n'
+        f'WITH * LIMIT {max_rows + 1}\n'
+        f'WITH collect([{", ".join(quoted)}]) AS _rr_rows\n'
+        f"WITH _rr_rows, CASE WHEN size(_rr_rows) > {max_rows} THEN '_rr_execute_cap' ELSE '00:00:00' END AS _rr_d\n"
+        'WHERE localtime(_rr_d) IS NOT NULL\n'
+        'UNWIND _rr_rows AS _rr_row\n'
+        f'RETURN {projected}'
+    )
+
+
+def _is_execute_cap_error(exc: BaseException) -> bool:
+    """True when FalkorDB failed the row-cap guard, not the user's statement.
+
+    The client surfaces ``Invalid time string: _rr_execute_cap`` and omits the
+    failing expression. A division by zero, or ``localtime`` of any other value,
+    stays a driver error.
+    """
+    return _CAP_ERROR in str(exc)
+
+
+def _plan_text(plan: Any) -> str:
+    """Flatten an EXPLAIN result into the indented plan text."""
+    if isinstance(plan, str):
+        return plan
+    raw = getattr(plan, 'plan', None)
+    if isinstance(raw, (list, tuple)):
+        return '\n'.join(str(line) for line in raw)
+    return str(plan)
+
+
+def _columns_from_plan(plan: Any) -> List[str]:
+    """Result column names from the first Project operator, or [] when there are none.
+
+    GRAPH.EXPLAIN nests Project's result names one step deeper than the operator
+    and nests the child operator further in. The step is one space in the client's
+    plan list and four in some printed dumps; the first deeper line sets it.
+    EXPLAIN does not run the write.
+    """
+    lines = _plan_text(plan).splitlines()
+    project_at = None
+    project_indent = 0
+    for index, line in enumerate(lines):
+        if line.strip() == 'Project' or line.strip().startswith('Project '):
+            project_at = index
+            project_indent = len(line) - len(line.lstrip(' '))
+            break
+    if project_at is None:
+        return []
+
+    column_indent = None
+    columns: List[str] = []
+    for line in lines[project_at + 1 :]:
+        if not line.strip():
+            continue
+        indent = len(line) - len(line.lstrip(' '))
+        if indent <= project_indent:
+            break
+        if column_indent is None:
+            column_indent = indent
+        if indent == column_indent:
+            name = line.strip().split(' | ', 1)[0].strip()
+            if name:
+                columns.append(name)
+    return columns
 
 
 def _affected_rows(result) -> int:

@@ -870,6 +870,26 @@ object), never `filepath:` (Node-only). Read
 before authoring the `.pipe` content itself, and
 `ROCKETRIDE_typescript_API.md` for the full client reference.
 
+**Catalog nodes only.** A store app's pipelines may use only catalog nodes:
+the nodes that ship with the engine (`nodes/src/nodes` in the server repo;
+the node catalog on the docs site). A custom node (`local_nodes`, loaded
+with `--node_path`) exists only on the engine that loads it. RocketRide
+Cloud loads none, and also refuses the few catalog nodes marked `nosaas`,
+so being in the catalog is necessary, not sufficient. Store reviewers
+reject a submission whose pipelines reference a provider outside the
+catalog, and nothing before review checks it: the Package and Store
+preflights do not read `.pipe` providers, and
+`.rocketride/services-catalog.json` mirrors whichever engine the workspace
+last synced from, local nodes included, so on a self-hosted engine with
+`--node_path` that file is not the catalog. Decide this before building.
+If the catalog has no node for a step, keep that logic in the app (the app
+already sends documents, controls pipes and makes decisions), or give an
+agent step bounded Python through `tool_python` (sandboxed: allowlisted
+imports only, no network, filesystem or subprocess access). Only a step
+that must run inside the engine is a candidate for a catalog node, and
+that goes through an issue in the server repo, not into the app. Never
+scaffold a custom node for a store app.
+
 ### Secrets and configuration
 
 Pipeline configs reference secrets as `${ROCKETRIDE_*}` placeholders.
@@ -898,7 +918,14 @@ await client.terminate(token);
 
 `use()` is expensive — start the pipeline once per session and keep the
 token; never start/stop around every request. `ttl` controls the idle
-shutdown window (`0` = run until terminated).
+shutdown window (`0` disables the timeout; the default is 15 minutes).
+The idle clock restarts on pipeline data requests and on `apaevt_*` events
+from the pipeline. Status polling, raw stdout, and debugger events do not
+reset it. The task stops after approximately `ttl` seconds without that
+activity, and its billing ends when the task stops. The engine checks idle
+time once a minute in 60-second steps, so the stop can come up to a minute
+before `ttl`. A long step that emits nothing can still hit it: size `ttl`
+to your longest quiet step plus at least a minute of margin.
 
 ### One task for everyone vs a task per user
 
@@ -907,8 +934,28 @@ your app calls `use()`, the owner is the signed-in **user**. So every user
 of your app gets their own instance of the pipeline, automatically.
 `useExisting` does not change that: it attaches to *that user's* own
 already-running instance (a reload, a second tab, a second component)
-instead of failing with 'Pipeline is already running.' — it never crosses
-user boundaries.
+instead of failing with 'Pipeline is already running.' — with the default
+token it never crosses user boundaries. (A custom token is looked up by its
+value alone; see below.)
+
+To run two instances of one pipeline for the same user at once (a second
+tab, say), give each `use()` its own `token`: the server then keys the task
+on that token instead of the hash. Use an unguessable value that keeps the
+`tk_` prefix (`tk_` plus a UUID, for example): the value is the run's private
+token (full control for anyone who presents it), tokens share one namespace
+across every user of the server, and a token without the prefix cannot serve
+as a private token on webhook or dropper endpoints. With `useExisting`, a
+token that matches a running task attaches to it, whoever started it: one
+more reason the value must be unguessable. Keep the tokens you chose: both
+instances get the same `pk_` public authorization key, and a webhook call or
+dropper upload that uses it always reaches the instance that started first
+(to send data to one specific instance, use its `tk_` token); `getTaskToken()`
+is keyed by `projectId` and source, so it returns only one of them. Monitor
+subscriptions are keyed the same way: both instances' events arrive in one
+subscription (each event's `body.__id` names the emitting run, best effort),
+and a few minutes after one instance ends the shared subscription is
+dropped, so resubscribe. The run log is not built for two instances of one
+identity; treat it as unreliable.
 
 **Per-user tasks (the default, and the only behavior `use()` can produce):**
 
@@ -935,7 +982,11 @@ if (token) await client.send(token, data, undefined, 'text/plain');
   accumulates is visible to all of them.
 - Cost and lifecycle — the run bills to the owning team, resolves the
   team's environment, and outlives any one user's session; restarting or
-  terminating it affects everyone at once.
+  terminating it affects everyone at once. Shared runs do not inherit the
+  default development idle timeout. A scheduled run can have an explicit
+  `ttl`; a manual `deploy.run` has no timeout and can remain running, and
+  billing, until the pipeline finishes or someone terminates it (see
+  'Lifecycle and cost' below).
 
 **Choosing:** per-user when the pipeline holds per-user state or cost
 should follow the user; shared when the pipeline is a service — one big
@@ -999,7 +1050,10 @@ it cannot serve.
 `apaevt_status_update` events stream the same status fields (errors and
 exit code included) while the task runs, and an `apaevt_task` event with
 `action: 'end'` that you did not cause — no `terminate()`, no TTL you
-expected — is your cue to check the status and show the error state:
+expected — is your cue to check the status and show the error state. The
+end event's body carries `reason: 'ttl'` when an idle timeout or a run
+window ended the task, so you can show "stopped by its time limit" instead
+of an error:
 
 ```typescript
 useEffect(() => {
@@ -1048,12 +1102,41 @@ that pipeline separately and manage it through the deploy API
 (`client.deploy.*` — see the SDK docs); your app can still observe its runs
 and read its outputs.
 
+### Lifecycle and cost: bundle and `use()` unless it is a service
+
+The default for an app's pipeline is the bundled one: the `.pipe` lives in
+the app folder, ships with the app so the app and the pipeline always
+match, and your code starts it with `use()`. With the default timeout, each
+user's instance stops by itself when idle. Reach for a team deployment
+when the pipeline is a service shared by a team. To limit a scheduled
+run's lifetime, configure its `ttl`: deployed runs do not inherit the
+default development timeout.
+
+| How the run started | When it stops | Who pays |
+|---|---|---|
+| `use()` from the app | finishes, is terminated, or reaches approximately `ttl` seconds without a pipeline data request or `apaevt_*` event (default 15 minutes; `0` disables timeout) | the signed-in user's development team |
+| A schedule (`deploy.setSchedule(..., { ttl })`) | finishes, is terminated, or reaches its configured `ttl`, counted from the last pipeline data request; omitted or zero `ttl` disables timeout | the deployment's billing team |
+| `deploy.run(projectId, sourceId, teamId)` by hand | no timeout: it runs until the pipeline finishes or someone with `task.control` on the deployment's team calls `terminate(token)` with the token `deploy.run` returned. Disabling the deployment refuses new runs but does not stop one already going | the deployment's billing team |
+
+A long-lived pipeline started with `deploy.run` can keep running and
+billing indefinitely: a manual run ignores the schedule's `ttl`, even
+when a schedule exists. It ends when the pipeline finishes or the task is
+terminated. To apply a configured timeout, start it through its schedule
+(see 'The team-service pattern' below). The scheduled timeout counts
+from the last pipeline data request; emitted events do not reset it. A
+long processing step can therefore be cut off even while emitting events.
+The timeout is approximate, using the same minute-by-minute checks
+described above. The `apaevt_task` end event carries `reason: 'ttl'`
+when a timeout ended the run. An absent reason does not establish a crash:
+normal completion can also omit it. Check task status and exit information
+to distinguish other outcomes.
+
 ### The team-service pattern: addressing a scheduled deployment
 
-The counterpart of embedding, and the shape "runs 9:00–18:00 for the whole
-team" requirements always take: ONE shared pipeline deployed as its own
-`kind: 'pipe'` project and scheduled on a team, with the app **addressing**
-the running task instead of starting its own. The pieces:
+For a scheduled service shared by a team, deploy the pipeline as its own
+`kind: 'pipe'` project. The app **addresses** the running task instead of
+starting its own. Cron determines the start; `ttl` does not guarantee a
+fixed closing time because pipeline data requests extend it. The pieces:
 
 - **Identity without drift** — import the `.pipe` for its `project_id` (the
   scaffold's build treats `.pipe` as JSON) and address the service as
@@ -1494,6 +1577,23 @@ Key rules:
 You normally never run these yourself — the watch runs the dev server, and
 deploys build on the server — but they are there for CI or scripted checks.
 
+**The `dist/` folder is never served.** `npm run build` writes `dist/` in
+your app folder, and nothing reads it: not the preview, not the server. A
+local build only proves that the app compiles. The two places a browser
+gets your app from are:
+
+- **The preview** loads it from the watch's dev server (see
+  [The Dev Loop](#the-dev-loop)). If a change does not appear there, read
+  the watch status line. Rebuilding into `dist/` will not help.
+- **Everyone else** loads a deployed version, which the server built itself
+  from your uploaded source and serves at
+  `/apps/<appManifest.id>/v<N>/remoteEntry.js` (see
+  [Deploy and Publish](#deploy-and-publish)). If a change does not appear
+  for them, deploy a new version and publish it.
+
+The served path is keyed on `appManifest.id`, never on the name of your app
+folder.
+
 ---
 
 ## Deploy and Publish
@@ -1560,6 +1660,10 @@ that audience again revives it.
   (review always tracks your current work — to ship older code, deploy it
   again as a new version). Submitting flips the version `private → submit`.
 - **Withdraw** cancels your own submission (`submit → private`).
+- Reviewers reject a submission whose bundled `.pipe` files reference a
+  node outside the catalog (see 'Catalog nodes only' under Embedding
+  Pipelines). No preflight checks this for you: read the providers in your
+  `.pipe` files before you submit.
 - The verdict lands as `ready` (approved — publishable to `@public`) or
   `rejected`, pushed live to your App Builder (`app:statusChanged`), with
   reviewer notes on rejection.

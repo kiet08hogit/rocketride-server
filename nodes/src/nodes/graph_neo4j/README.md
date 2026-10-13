@@ -49,7 +49,7 @@ The functions are registered under the `neo4j` service prefix: for example,
 | `neo4j.get_data` | Turn a natural-language request into a read-only Cypher query, run it, and return rows. |
 | `neo4j.get_schema` | Return the reflected labels, properties, and relationship types. |
 | `neo4j.get_query` | Return generated read-only Cypher without executing it. |
-| `neo4j.execute` | Run raw Cypher only when direct execution is enabled. Optional `params` binds `$name` values. If the result has more rows than the execute row limit, the call fails and nothing is saved. |
+| `neo4j.execute` | Run raw Cypher only when direct execution is enabled. |
 | `neo4j.dialect` | Return `{"dialect": "neo4j"}`. |
 | `neo4j.get_cypher` | Deprecated compatibility alias for `get_query`; it also includes the statement under `cypher`. |
 
@@ -62,11 +62,9 @@ instead of rows.
 
 `get_schema` accepts an optional `label`; an unknown label returns an `error`,
 otherwise the response includes `{database, labels, nodes, relationships}`.
-`execute` requires a non-empty raw `query` and returns `{rows, affected_rows}`.
-Optional `params` binds `$name` values, so callers do not paste them into the
-query text. It raises an error while direct execution is disabled. If the
-result has more rows than the execute row limit, the call fails and the write
-is not saved. `dialect` accepts no
+`execute` requires a non-empty raw `query`, accepts an optional object `params`
+whose values bind to `$name` placeholders, and returns `{rows, affected_rows}`;
+it raises an error while direct execution is disabled. `dialect` accepts no
 meaningful arguments. Generation failures return an error rather than an
 executable query, and `get_cypher` preserves those outcomes while adding
 `cypher` when a query is available.
@@ -113,8 +111,12 @@ agent and lane traffic: generated reads pass the Cypher safety gate and use a
 READ access-mode session. Turn it on only for a trusted caller that must issue
 raw Cypher through `execute` or `QuestionType.EXECUTE`, because that path skips
 both LLM translation and the read-only gate and can write to the database.
-Raw execution is still limited to 25,000 returned rows. Exceeding that limit
-raises an error, and the write is not saved.
+Raw execution is still limited to 25,000 returned rows; exceeding that limit
+raises an error and rolls the statement back, so nothing is saved and a retry
+is safe. Batched statements are the exception: `CALL { ... } IN TRANSACTIONS`
+and, on Neo4j 4, `USING PERIODIC COMMIT`. Neo4j commits each batch as it runs,
+so a retry after the error can repeat writes; keep what these statements
+return under the limit.
 
 ## Authentication
 

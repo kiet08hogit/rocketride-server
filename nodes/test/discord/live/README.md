@@ -9,20 +9,55 @@ is off unless `DISCORD_LIVE=1` is set; a normal run collects and skips them.
 
 | Layer | File | What is real | What is stubbed |
 |---|---|---|---|
-| L1 live I/O | `test_live_io.py` (D01..D15) | Discord, the node | engine and pipeline |
+| L1 live I/O | `test_live_io.py` (D01..D19; backfill is in F35) | Discord, the node | engine and pipeline |
 | L2 replay | `test_replay.py` (R01..R10) | Discord, the node | engine and pipeline |
 | L3 engine e2e | `test_engine_e2e.py` (E01..E04) | Discord, the node, the engine, a real model | nothing |
 | L4 full engine suite | `test_engine_full.py` | Discord, the node, the engine | the model (`fake_llm.py`) or none (`echo` pipe) |
 
 - **L1** drives `_on_message` (gating) and `_process_message` directly on a real
   bot connection: reply modes, mention and channel gating, outbound mentions,
-  attachments, metadata, chunking, events, typing, fatal startup paths.
+  attachments, metadata, chunking, events, typing, fatal startup paths, and the
+  support behaviours: thread history as context (D16), the escalation pause
+  (D17), acknowledging a message aimed at someone else (D18) and feedback
+  reactions (D19).
 - **L2** posts the ten made-up questions in `replay_seeds.md` and checks the
   plumbing: one correlated text object in, one reply out.
 - **L3** has a real engine spawn the node from `engine_min.pipe`; a second bot
   (the driver) posts questions and reads back what the node posted.
-- **L4** walks every base feature, success and failure, through real pipelines
-  on the engine, driven by the same driver bot.
+- **L4** walks every feature, success and failure, through real pipelines on
+  the engine, driven by the same driver bot. The support behaviour cases are:
+
+  | Case | Feature |
+  |---|---|
+  | F14 | `teamMentionAlias` rewritten to the first allowlisted role |
+  | F20 | `threadHistoryLimit` / `threadHistoryMaxChars` |
+  | F21, F22 | `escalationPause`: pause, team reply on `no_reply`, resume on mention, pause rebuilt after a restart |
+  | F23, F23b | `ignoreAimedAtOthers` / `ackEmoji`; a reply to the bot is still answered |
+  | F24 | `feedbackReactions` with `emitReactions` |
+  | F25 | `sanitizeReplies`: envelope, scratchpad, error text, empty answer |
+  | F26 | `nonAnswerRetries` |
+  | F35 | `backfillLimit` with an unreadable channel |
+  | F40 | the model endpoint rejecting every call |
+  | F41b | `pipelineTimeoutSeconds` |
+  | F45 | engine restarted mid-thread (needs `DISCORD_E2E_ENGINE_DIR`) |
+  | F46 | one realistic AI run on a saved pipe (needs `DISCORD_E2E_AI_PIPE`) |
+
+  F32..F34 cover event capture into a disposable PostgreSQL database and run
+  only when the `DISCORD_E2E_PG_*` variables are set:
+  - F32: with no capture table yet, the check before the first insert creates
+    `discord_events`, and the question and answer land with the configured
+    `captureSource`.
+  - F32b: a database user granted only `INSERT` on the existing table still
+    gets the question and answer rows (it needs `ROCKETRIDE_DISCORD_PG_PASSWORD`
+    in the test environment as well, for the role it creates).
+  - F33: text plus a `.md` attachment keeps two `message` rows (`text`,
+    `text:1`), and inserting the same rows again adds nothing.
+  - F34: the database container is stopped mid-run; the bot still answers,
+    that question's rows are dropped and the failure is logged, and capture
+    resumes once the database is back and the node's 60-second backoff has
+    passed, with a `recovered` log line. It passes
+    only when both log lines are found, so it needs `DISCORD_E2E_ENGINE_LOG`
+    and is skipped without it.
 
 ## How to run
 
@@ -62,8 +97,15 @@ path, id or token is stored in the repo.
 | `ROCKETRIDE_URI` | L3, L4 | engine to run the pipes on |
 | `DISCORD_E2E_<KEY>` | L3, L4 | overrides one key of the id map's `engine` block, e.g. `DISCORD_E2E_SUPPORTCHANNELID` |
 | `DISCORD_E2E_FULL` | L4 | `1` to run the full suite |
-| `DISCORD_E2E_ENGINE_LOG` | L4, optional | engine log file, grepped for evidence |
+| `DISCORD_E2E_ENGINE_LOG` | L4, optional; required for F34 | engine log file, grepped for evidence |
+| `DISCORD_E2E_ENGINE_DIR` | L4, optional | engine install directory; F45 kills and restarts the engine from it |
+| `DISCORD_E2E_AI_PIPE` | L4, optional | a saved AI pipe with a discord source, for F46; Slack tool and database components are removed before it runs |
 | `DISCORD_E2E_RESULTS_DIR` | L4, optional | where result rows are written (default: system temp directory) |
+| `DISCORD_E2E_PG_CONTAINER` | L4, optional | Docker container running a disposable PostgreSQL for F32..F34; F34 stops and starts it |
+| `DISCORD_E2E_PG_HOST` | L4, optional | `host:port` the engine's `db_postgres` node connects to |
+| `DISCORD_E2E_PG_USER` | L4, optional | database user, for the engine and for `psql` inside the container |
+| `DISCORD_E2E_PG_DATABASE` | L4, optional | database the capture cases drop and create `discord_events` in |
+| `DISCORD_E2E_PG_DISPOSABLE` | L4, required with the PG variables | Must be exactly `<container>/<database>` to confirm F32 may drop `discord_events` and F34 may stop the container; the cases also refuse a database holding any other table |
 | `DISCORD_LIVE_RESULTS_DIR` | L2, optional | where replay verdicts are written (default: system temp directory) |
 
 Id map (empty strings mean "not provided"; the harness discovers what it can and
@@ -107,9 +149,12 @@ environment):
 | `ROCKETRIDE_DISCORD_SUPPORT_CHANNEL_ID` | L3, L4 | the channel the driver posts in (the id map's `engine.supportChannelId`) |
 | `ROCKETRIDE_DISCORD_TEAM_ROLE_ID` | L3 | a role the answers may mention (`allowedMentionRoleIds` in `engine_min.pipe`) |
 | `ROCKETRIDE_OPENAI_KEY` | L3 | OpenAI key for the model in `engine_min.pipe` |
+| `ROCKETRIDE_DISCORD_PG_PASSWORD` | L4, F32..F34 only | password of `DISCORD_E2E_PG_USER`, for the capture pipe's `db_postgres` node |
 
 `ROCKETRIDE_DISCORD_E2E_NO_SUCH_TOKEN` must stay unset: L4 uses it to check
 that an unset variable in the token fails the start with a message naming it.
+
+Point the `DISCORD_E2E_PG_*` variables only at a database you can throw away.
 
 ## Residue policy
 
@@ -129,6 +174,3 @@ that an unset variable in the token fails the start with a message naming it.
   handles `MESSAGE_CREATE` only).
 - Grading answer content: L2 checks plumbing only, and L3 checks a few fixed
   expectations of a real model.
-- The behaviours that ship in follow-up changes (thread history, escalation
-  pause, reply sanitizing, retries, timeouts, backfill, event capture) are not
-  exercised here.

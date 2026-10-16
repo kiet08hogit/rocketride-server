@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import datetime
 import importlib.util
+import os
 import sys
 import types
 
@@ -236,10 +237,11 @@ class _FakeResult:
 
 
 class _FakeGraph:
-    def __init__(self, result=None, raise_error=None, explain_plan='plan'):
+    def __init__(self, result=None, raise_error=None, explain_plan='plan', explain_error=None):
         self._result = result or _FakeResult()
         self._raise = raise_error
         self.explain_plan = explain_plan
+        self._explain_error = explain_error
         self.calls = []
 
     def query(self, q, params=None, timeout=None):
@@ -256,6 +258,8 @@ class _FakeGraph:
 
     def explain(self, q, params=None):
         self.calls.append(('explain', q, params, None))
+        if self._explain_error:
+            raise self._explain_error
         if self._raise:
             raise self._raise
         return self.explain_plan
@@ -783,48 +787,82 @@ def test_execute_user_localtime_error_stays_a_driver_error():
         glb._run_query_raw("RETURN localtime('noon') AS t")
 
 
-def test_explain_project_columns_and_return_star():
-    plan = '\n'.join(
-        [
-            'Results',
-            '    Project',
-            '        n',
-            '            Node By Label Scan',
-        ]
-    )
-    assert _glb_mod._columns_from_plan(plan) == ['n']
-    # The Python client stores one space per nesting level, not four.
-    one_space = '\n'.join(['Results', ' Project', '  n.id', '  n.name', '   Node By Label Scan'])
-    assert _glb_mod._columns_from_plan(one_space) == ['n.id', 'n.name']
-    assert _glb_mod._columns_from_plan('plan') == []
-
-    graph = _FakeGraph(
-        _FakeResult(result_set=[['Ada']], header=[[1, 'n']]),
-        explain_plan=plan,
-    )
+def test_execute_return_star_is_refused():
+    """RETURN * has no names to cap, so it never reaches the server."""
+    graph = _FakeGraph()
     glb = _FakeGlobal(graph)
-    glb._run_query_raw('MATCH (n) RETURN *', params={'name': 'Ada'})
-    assert graph.calls[0][0] == 'explain'
-    assert graph.calls[0][2] == {'name': 'Ada'}
+    with pytest.raises(ValueError, match='name the returned columns'):
+        glb._run_query_raw('MATCH (n) RETURN *')
+    assert graph.calls == []
+
+
+class _PlanOp:
+    """The fields of falkordb.execution_plan.Operation that execute reads."""
+
+    def __init__(self, name, children=None, args=None):
+        self.name = name
+        self.children = children or []
+        self.args = args
+
+
+class _Plan:
+    def __init__(self, root):
+        self.structured_plan = root
+
+
+def test_execute_grammar_miss_without_rows_is_sent_unchanged():
+    """CREATE INDEX, FOREACH, and LOAD CSV used to run, and still do."""
+    # No Project operator: the command returns no rows.
+    plan = _Plan(_PlanOp('ProcedureCall', args='db.idx.fulltext.createNodeIndex'))
+    statements = [
+        'CREATE INDEX FOR (p:Person) ON (p.name)',
+        'CREATE INDEX ON :Person(name)',
+        'MATCH (n) FOREACH (x IN [1,2] | SET n.v = x)',
+        'LOAD CSV FROM "file:///tmp/a.csv" AS row CREATE (n:Item {id: row.id})',
+    ]
+    for statement in statements:
+        graph = _FakeGraph(explain_plan=plan)
+        glb = _FakeGlobal(graph)
+        glb._run_query_raw(statement)
+        assert graph.calls[0][0] == 'explain'
+        assert graph.calls[1] == ('query', statement, None, glb.query_timeout_ms)
+
+
+def test_execute_call_subquery_is_capped_from_the_plan():
+    """A CALL {} the grammar rejects still runs, with the cap, when EXPLAIN names columns."""
+    # Same shape ExecutionPlan builds: the column is a Project child, and the
+    # producer hangs under that column.
+    plan = _Plan(_PlanOp('Results', [_PlanOp('Project', [_PlanOp('i', [_PlanOp('Apply')])])]))
+    statement = 'MATCH (n) CALL { WITH n RETURN n.id AS i } RETURN i'
+    graph = _FakeGraph(_FakeResult(result_set=[[1]], header=[[1, 'i']]), explain_plan=plan)
+    glb = _FakeGlobal(graph)
+    glb._run_query_raw(statement, params={'name': 'Ada'})
+    assert graph.calls[0] == ('explain', statement, {'name': 'Ada'}, None)
     assert graph.calls[1][0] == 'query'
-    assert 'collect([`n`])' in graph.calls[1][1]
+    assert 'collect([`i`])' in graph.calls[1][1]
     assert graph.calls[1][2] == {'name': 'Ada'}
 
 
-def test_execute_return_star_without_columns_does_not_run():
-    graph = _FakeGraph()
+def test_execute_explain_failure_does_not_block_a_falkordb_command():
+    graph = _FakeGraph(explain_error=mod.RedisError('EXPLAIN failed'))
     glb = _FakeGlobal(graph)
-    with pytest.raises(ValueError, match='RETURN \\*'):
-        glb._run_query_raw('MATCH (n) RETURN *')
-    assert all(call[0] != 'query' for call in graph.calls)
+    statement = 'CREATE INDEX FOR (p:Person) ON (p.name)'
+    glb._run_query_raw(statement)
+    assert graph.calls[1] == ('query', statement, None, glb.query_timeout_ms)
 
 
-def test_execute_unparseable_does_not_run():
-    graph = _FakeGraph()
+def test_execute_old_server_maps_a_rejected_wrapper():
+    graph = _FakeGraph(raise_error=mod.RedisError("Invalid input '{': expected a clause (line: 1, column: 6)"))
     glb = _FakeGlobal(graph)
-    with pytest.raises(ValueError, match='row cap'):
-        glb._run_query_raw('MATCH (n RETURN n')
-    assert graph.calls == []
+    with pytest.raises(ValueError, match='FalkorDB 4.0'):
+        glb._run_query_raw('RETURN 1 AS n')
+
+
+def test_execute_user_syntax_error_inside_the_wrapper_stays_a_driver_error():
+    graph = _FakeGraph(raise_error=mod.RedisError("Invalid input '(': expected an expression (line: 3, column: 8)"))
+    glb = _FakeGlobal(graph)
+    with pytest.raises(mod.RedisError, match='line: 3'):
+        glb._run_query_raw('RETURN 1 AS n')
 
 
 # ---------------------------------------------------------------------------
@@ -1118,3 +1156,114 @@ def test_reflect_schema_failure_does_not_break_begin(monkeypatch):
     graph_base.GraphGlobalBase.beginGlobal(glb)
 
     assert glb.graph_schema == {'nodes': {}, 'relationships': []}
+
+
+# ---------------------------------------------------------------------------
+# EXECUTE row cap against a real FalkorDB. Off unless a server is named:
+# FALKORDB_TEST_URL, or FALKORDB_TEST_HOST and optional FALKORDB_TEST_PORT.
+# ---------------------------------------------------------------------------
+
+_LIVE_GRAPH = 'rr_execute_cap'
+
+
+def _item_count(db) -> int:
+    result = db.select_graph(_LIVE_GRAPH).query('MATCH (n:Item) RETURN count(n)')
+    rows = result.result_set or []
+    if not rows or not rows[0]:
+        return 0
+    return int(rows[0][0])
+
+
+@pytest.fixture
+def falkordb_execute(monkeypatch):
+    """A real server and an IGlobal pointed at a graph this fixture deletes."""
+    url = os.environ.get('FALKORDB_TEST_URL', '').strip()
+    host = os.environ.get('FALKORDB_TEST_HOST', '').strip()
+    if not url and not host:
+        pytest.skip('set FALKORDB_TEST_URL or FALKORDB_TEST_HOST to run execute against FalkorDB')
+
+    from redis.exceptions import RedisError as RealRedisError
+
+    monkeypatch.setattr(_glb_mod, 'RedisError', RealRedisError)
+    try:
+        import falkordb
+        from falkordb import FalkorDB
+    except ImportError:
+        pytest.skip('falkordb client is not installed')
+    if 'mocks' in (getattr(falkordb, '__file__', '') or '').replace('\\', '/'):
+        pytest.skip('the FalkorDB test mock is on the path; run this file without ROCKETRIDE_MOCK')
+
+    try:
+        if url:
+            db = FalkorDB.from_url(url, socket_connect_timeout=1, socket_timeout=10)
+        else:
+            port = int(os.environ.get('FALKORDB_TEST_PORT', '6379'))
+            db = FalkorDB(host=host, port=port, socket_connect_timeout=1, socket_timeout=10)
+        db.list_graphs()
+    except Exception as exc:
+        pytest.skip(f'FalkorDB is not reachable ({exc})')
+
+    try:
+        db.select_graph(_LIVE_GRAPH).delete()
+    except Exception:
+        pass
+
+    glb = _glb_mod.IGlobal()
+    glb.client = db
+    glb.graph_name = _LIVE_GRAPH
+    glb.query_timeout_ms = 30000
+    glb.max_execute_rows = 3
+    glb.max_rows = 250
+    glb.allow_writes = True
+    try:
+        yield glb, db
+    finally:
+        try:
+            db.select_graph(_LIVE_GRAPH).delete()
+        except Exception:
+            pass
+        db.close()
+
+
+def test_live_over_cap_write_rolls_back(falkordb_execute):
+    """The #2542 repro: five created nodes, cap 3, and the graph stays empty."""
+    glb, db = falkordb_execute
+    with pytest.raises(ValueError, match='max_execute_rows=3'):
+        glb._run_query_raw('UNWIND range(1, 5) AS i CREATE (n:Item {id: i}) RETURN n.id AS id')
+    assert _item_count(db) == 0
+
+
+def test_live_under_cap_write_commits(falkordb_execute):
+    glb, db = falkordb_execute
+    out = glb._run_query_raw('UNWIND range(1, 2) AS i CREATE (n:Item {id: i}) RETURN n.id AS id')
+    assert len(out['rows']) == 2
+    assert _item_count(db) == 2
+
+
+def test_live_null_column_is_counted_and_committed(falkordb_execute):
+    glb, db = falkordb_execute
+    out = glb._run_query_raw('CREATE (n:Item {id: 1}) RETURN n.id AS id, n.name AS name')
+    assert out['rows'] == [{'id': 1, 'name': None}]
+    assert _item_count(db) == 1
+
+
+def test_live_return_star_writes_nothing(falkordb_execute):
+    glb, db = falkordb_execute
+    with pytest.raises(ValueError, match='name the returned columns'):
+        glb._run_query_raw('CREATE (n:Item {id: 1}) RETURN *')
+    assert _item_count(db) == 0
+
+
+def test_live_call_subquery_over_cap_rolls_back(falkordb_execute):
+    glb, db = falkordb_execute
+    query = 'UNWIND range(1, 5) AS i CALL { WITH i CREATE (n:Item {id: i}) RETURN i AS i } RETURN i'
+    with pytest.raises(ValueError, match='max_execute_rows=3'):
+        glb._run_query_raw(query)
+    assert _item_count(db) == 0
+
+
+def test_live_index_and_foreach_reach_the_server(falkordb_execute):
+    glb, _db = falkordb_execute
+    glb._run_query_raw('CREATE INDEX FOR (p:Person) ON (p.name)')
+    glb._run_query_raw('CREATE (:Person {name: "a"})')
+    glb._run_query_raw('MATCH (n:Person) FOREACH (x IN [1, 2] | SET n.v = x)')

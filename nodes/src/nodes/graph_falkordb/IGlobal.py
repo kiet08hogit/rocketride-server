@@ -208,8 +208,17 @@ class IGlobal(GraphGlobalBase):
         except RedisError as e:
             if _is_execute_cap_error(e):
                 raise ValueError(f'EXECUTE query exceeded max_execute_rows={max_rows}') from e
+            # The wrapper's first line is `CALL {`. A server without subqueries
+            # rejects that line; the user's statement starts on the next line.
+            if _GUARD_CALL in statement and _is_subquery_unsupported(e):
+                raise ValueError(
+                    'EXECUTE query was not run because this FalkorDB server does not support '
+                    'CALL {} subqueries. The row cap needs FalkorDB 4.0 or newer.'
+                ) from e
             raise
 
+        # Backstop for a statement whose in-query guard was skipped. The server
+        # enforces the cap when the guard runs; this only fires when it did not.
         rows = self._rows_as_dicts(result, cap=max_rows + 1)
         if len(rows) > max_rows:
             raise ValueError(f'EXECUTE query exceeded max_execute_rows={max_rows}')
@@ -220,31 +229,41 @@ class IGlobal(GraphGlobalBase):
         return {'rows': rows, 'affected_rows': _affected_rows(result)}
 
     def _capped_execute_statement(self, query: str, params: Optional[Dict[str, Any]], max_rows: int) -> str:
-        """Statement to send: unchanged for a pure write, wrapped when it returns rows.
+        """Statement to send: unchanged for a pure write, wrapped when it returns named columns.
 
-        Raises before ``query()`` when the row cap cannot be applied, so nothing
-        is written.
+        ``RETURN *`` and a column that would hide the guard raise before ``query()``,
+        so nothing is written.
         """
         statement = _strip_statement(query)
         try:
             facts = analyze(statement)
-        except AgeTranslationError as e:
-            raise ValueError(f'EXECUTE query was not run because its row cap could not be checked: {e}') from e
+        except AgeTranslationError:
+            # The openCypher grammar is not a gate. EXPLAIN, which does not run
+            # the write, decides whether this FalkorDB command returns rows.
+            return self._unparsed_execute_statement(statement, params, max_rows)
 
         if facts.returns_star:
-            columns = _columns_from_plan(self.select_graph().explain(statement, params=params or None))
-            if not columns:
-                raise ValueError('EXECUTE query was not run because RETURN * columns could not be read from EXPLAIN')
-        elif not facts.return_columns:
+            raise ValueError('EXECUTE query was not run: name the returned columns')
+        if not facts.return_columns:
             return statement
-        else:
-            columns = [column.display_name for column in facts.return_columns]
+        columns = [column.display_name for column in facts.return_columns]
+        return _guarded_statement(statement, max_rows, columns)
 
-        reserved = _GUARD_NAMES.intersection(columns)
-        if reserved:
-            names = ', '.join(sorted(reserved))
-            raise ValueError(f'EXECUTE query was not run because a result column uses a reserved name ({names})')
-        return _wrap_capped_query(statement, max_rows, columns)
+    def _unparsed_execute_statement(self, statement: str, params: Optional[Dict[str, Any]], max_rows: int) -> str:
+        """Statement to send when the openCypher grammar does not recognize it.
+
+        No Project operator means no rows, so index creation, ``FOREACH``, and
+        other non-returning commands go out unchanged. A Project operator's
+        children are the result columns, and that statement gets the same cap.
+        """
+        try:
+            plan = self.select_graph().explain(statement, params=params or None)
+        except RedisError:
+            return statement
+        columns = _structured_columns(plan)
+        if not columns:
+            return statement
+        return _guarded_statement(statement, max_rows, columns)
 
     def _validate_query(self, query: str) -> Tuple[bool, str]:
         """Check syntax with EXPLAIN without running the query."""
@@ -497,9 +516,15 @@ def _quote_name(name: str) -> str:
     return '`' + name.replace('`', '``') + '`'
 
 
-# localtime() echoes this token. The Python client drops errCtx, so the cap
-# check matches this message and leaves every other server error alone.
+# FalkorDB's parse_time_string reports `Invalid time string: <input>` when the
+# argument is not a time. `_rr_execute_cap` takes that path: it has no colon
+# and is not all digits. The Python client drops errCtx, so the cap check
+# matches this substring and leaves every other server error alone.
+# https://github.com/FalkorDB/FalkorDB/blob/master/graph/src/runtime/functions/temporal.rs
 _CAP_ERROR = 'Invalid time string: _rr_execute_cap'
+# Present only in a statement this module wrapped, so a user's own CALL is not
+# mistaken for a server that lacks subqueries.
+_GUARD_CALL = 'WHERE localtime(_rr_d) IS NOT NULL'
 
 
 def _wrap_capped_query(statement: str, max_rows: int, columns: List[str]) -> str:
@@ -511,7 +536,13 @@ def _wrap_capped_query(statement: str, max_rows: int, columns: List[str]) -> str
     reports that token. The call sits in WHERE so a planner cannot drop it.
     """
     quoted = [_quote_name(name) for name in columns]
-    body = '\n'.join(f'  {line}' if line else '' for line in statement.splitlines())
+    indented = []
+    for line in statement.splitlines():
+        if line:
+            indented.append(f'  {line}')
+        else:
+            indented.append('')
+    body = '\n'.join(indented)
     projected = ', '.join(f'_rr_row[{index}] AS {name}' for index, name in enumerate(quoted))
     return (
         'CALL {\n'
@@ -526,6 +557,15 @@ def _wrap_capped_query(statement: str, max_rows: int, columns: List[str]) -> str
     )
 
 
+def _guarded_statement(statement: str, max_rows: int, columns: List[str]) -> str:
+    """Wrap ``statement`` so too many rows fail inside the query, or refuse a guard name."""
+    reserved = _GUARD_NAMES.intersection(columns)
+    if reserved:
+        names = ', '.join(sorted(reserved))
+        raise ValueError(f'EXECUTE query was not run because a result column uses a reserved name ({names})')
+    return _wrap_capped_query(statement, max_rows, columns)
+
+
 def _is_execute_cap_error(exc: BaseException) -> bool:
     """True when FalkorDB failed the row-cap guard, not the user's statement.
 
@@ -536,50 +576,52 @@ def _is_execute_cap_error(exc: BaseException) -> bool:
     return _CAP_ERROR in str(exc)
 
 
-def _plan_text(plan: Any) -> str:
-    """Flatten an EXPLAIN result into the indented plan text."""
-    if isinstance(plan, str):
-        return plan
-    raw = getattr(plan, 'plan', None)
-    if isinstance(raw, (list, tuple)):
-        return '\n'.join(str(line) for line in raw)
-    return str(plan)
+def _is_subquery_unsupported(exc: BaseException) -> bool:
+    """True when the server rejected the wrapper's first line, not the user's text.
 
-
-def _columns_from_plan(plan: Any) -> List[str]:
-    """Result column names from the first Project operator, or [] when there are none.
-
-    GRAPH.EXPLAIN nests Project's result names one step deeper than the operator
-    and nests the child operator further in. The step is one space in the client's
-    plan list and four in some printed dumps; the first deeper line sets it.
-    EXPLAIN does not run the write.
+    FalkorDB reports ``Invalid input ... (line: 1, column: ...)``. The wrapper
+    owns line 1 (``CALL {``); the user's statement is indented beneath it.
     """
-    lines = _plan_text(plan).splitlines()
-    project_at = None
-    project_indent = 0
-    for index, line in enumerate(lines):
-        if line.strip() == 'Project' or line.strip().startswith('Project '):
-            project_at = index
-            project_indent = len(line) - len(line.lstrip(' '))
-            break
-    if project_at is None:
-        return []
+    text = str(exc)
+    if 'Invalid input' not in text:
+        return False
+    return 'line: 1' in text or 'line 1,' in text
 
-    column_indent = None
-    columns: List[str] = []
-    for line in lines[project_at + 1 :]:
-        if not line.strip():
+
+def _structured_columns(plan: Any) -> Optional[List[str]]:
+    """Result column names from the client's EXPLAIN tree.
+
+    ``[]`` means the plan has no Project operator, so the statement returns no
+    named columns and can be sent unchanged. ``None`` means the value is not a
+    parsed tree. Column names are the Project node's children; the producer
+    sits under the last column, so it is not itself a column.
+    """
+    root = getattr(plan, 'structured_plan', None)
+    if root is None:
+        return None
+    project = _find_named(root, 'Project')
+    if project is None:
+        return []
+    columns = []
+    for child in getattr(project, 'children', []) or []:
+        # An operator carries arguments (`Node By Label Scan | (n)`). A column does not.
+        if getattr(child, 'args', None):
             continue
-        indent = len(line) - len(line.lstrip(' '))
-        if indent <= project_indent:
-            break
-        if column_indent is None:
-            column_indent = indent
-        if indent == column_indent:
-            name = line.strip().split(' | ', 1)[0].strip()
-            if name:
-                columns.append(name)
+        name = getattr(child, 'name', None)
+        if name:
+            columns.append(str(name))
     return columns
+
+
+def _find_named(op: Any, name: str) -> Any:
+    """First operation named ``name`` in an EXPLAIN tree, or None."""
+    if getattr(op, 'name', None) == name:
+        return op
+    for child in getattr(op, 'children', []) or []:
+        found = _find_named(child, name)
+        if found is not None:
+            return found
+    return None
 
 
 def _affected_rows(result) -> int:
